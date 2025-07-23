@@ -40,6 +40,9 @@ const Game = () => {
     let enemies: Phaser.Physics.Arcade.Group;
     let score = 0;
     let scoreText: Phaser.GameObjects.Text;
+    let ammo = 30;
+    let ammoText: Phaser.GameObjects.Text;
+    let isReloading = false;
     let gameOver = false;
 
     function preload(this: Phaser.Scene) {
@@ -81,6 +84,7 @@ const Game = () => {
       });
 
       scoreText = this.add.text(16, 16, 'Score: 0', { fontSize: '32px', color: '#fff' });
+      ammoText = this.add.text(16, 50, 'Ammo: 30', { fontSize: '32px', color: '#fff' });
 
       this.physics.add.collider(bullets, enemies, (bullet, enemy) => {
         bullet.destroy();
@@ -97,11 +101,23 @@ const Game = () => {
       });
 
       this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-        if (gameOver) return;
+        if (gameOver || isReloading || ammo === 0) return;
 
         const bullet = bullets.get(player.x, player.y);
         if (bullet) {
           this.physics.moveTo(bullet, pointer.x, pointer.y, 500);
+          ammo--;
+          ammoText.setText('Ammo: ' + ammo);
+
+          if (ammo === 0) {
+            isReloading = true;
+            ammoText.setText('Reloading...');
+            this.time.delayedCall(2000, () => {
+              ammo = 30;
+              isReloading = false;
+              ammoText.setText('Ammo: ' + ammo);
+            });
+          }
         }
       });
     }
