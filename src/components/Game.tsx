@@ -62,6 +62,11 @@ const Game = () => {
         enemyGraphics.fillRect(0, 0, 24, 24);
         enemyGraphics.generateTexture('enemy', 24, 24);
         enemyGraphics.destroy();
+
+        const fastEnemyGraphics = this.make.graphics({ fillStyle: { color: 0x0000ff } }, true);
+        fastEnemyGraphics.fillRect(0, 0, 24, 24);
+        fastEnemyGraphics.generateTexture('enemy_fast', 24, 24);
+        fastEnemyGraphics.destroy();
     }
 
     function create(this: Phaser.Scene) {
@@ -93,8 +98,12 @@ const Game = () => {
 
       this.physics.add.collider(bullets, enemies, (bullet, enemy) => {
         (bullet as Phaser.GameObjects.Sprite).setActive(false).setVisible(false);
+        if ((enemy as Phaser.GameObjects.Sprite).texture.key === 'enemy_fast') {
+          score += 20;
+        } else {
+          score += 10;
+        }
         enemy.destroy();
-        score += 10;
         scoreText.setText('Score: ' + score);
       });
 
@@ -106,12 +115,31 @@ const Game = () => {
           this.physics.pause();
           player.setTint(0xff0000);
           gameOver = true;
-          this.add.text(400, 300, 'Game Over', { fontSize: '64px', color: '#ff0000' }).setOrigin(0.5);
+          const gameOverText = this.add.text(400, 300, 'Game Over', { fontSize: '64px', color: '#ff0000' }).setOrigin(0.5);
+          const restartText = this.add.text(400, 350, 'Press to restart', { fontSize: '32px', color: '#fff' }).setOrigin(0.5);
+
+          this.tweens.add({
+            targets: restartText,
+            alpha: { from: 0, to: 1 },
+            ease: 'Linear',
+            duration: 1000,
+            repeat: -1,
+            yoyo: true
+          });
         }
       });
 
       this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-        if (gameOver || isReloading || ammo === 0) return;
+        if (gameOver) {
+            this.scene.restart();
+            gameOver = false;
+            health = 100;
+            score = 0;
+            ammo = 30;
+            return;
+        }
+
+        if (isReloading || ammo === 0) return;
 
         const bullet = bullets.get(player.x, player.y);
         if (bullet) {
@@ -190,10 +218,14 @@ const Game = () => {
                 break;
         }
 
-      const enemy = enemies.create(spawnX, spawnY, 'enemy');
-      if(enemy) {
-        this.physics.moveToObject(enemy, player, 100);
-      }
+        const isFast = Math.random() < 0.1;
+        const enemyTexture = isFast ? 'enemy_fast' : 'enemy';
+        const enemy = enemies.create(spawnX, spawnY, enemyTexture);
+
+        if(enemy) {
+            const speed = isFast ? 200 : 100;
+            this.physics.moveToObject(enemy, player, speed);
+        }
     }
 
     function updateHealthBar() {
