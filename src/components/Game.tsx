@@ -115,6 +115,7 @@ const Game = () => {
 
         const bullet = bullets.get(player.x, player.y);
         if (bullet) {
+          (bullet as Phaser.GameObjects.Sprite).setActive(true).setVisible(true);
           this.physics.moveTo(bullet, pointer.x, pointer.y, 500);
           ammo--;
           ammoText.setText('Ammo: ' + ammo);
