@@ -178,22 +178,16 @@ export class MainScene extends Phaser.Scene {
     this.player.setTint(0xff0000);
     this.gameOver = true;
     this.gameUI.showGameOver();
-    this.saveScore(this.score);
+    this.promptScoreEntry();
   }
 
-  private saveScore(score: number) {
+  private promptScoreEntry() {
     const gameTime = this.getGameTime();
-    const scores = JSON.parse(localStorage.getItem('leaderboard') || '[]');
     
-    // Store both score and time
-    const scoreEntry = { score, time: gameTime };
-    scores.push(scoreEntry);
-    
-    // Sort by score (highest first)
-    scores.sort((a: {score: number, time: number}, b: {score: number, time: number}) => b.score - a.score);
-    
-    localStorage.setItem('leaderboard', JSON.stringify(scores.slice(0, 10)));
-    this.gameUI.showLeaderboard(scores.slice(0, 10));
+    // Delay to show game over screen briefly, then show score entry
+    this.time.delayedCall(2000, () => {
+      this.scene.start('ScoreEntryScene', { score: this.score, time: gameTime });
+    });
   }
 
   private handleShoot(pointer: Phaser.Input.Pointer) {

@@ -5,6 +5,7 @@ import { useEffect, useRef } from 'react';
 import { GAME_CONFIG } from '@/game/config/gameConfig';
 import { MainScene } from '@/game/scenes/MainScene';
 import { StartMenuScene } from '@/game/scenes/StartMenuScene';
+import { ScoreEntryScene } from '@/game/scenes/ScoreEntryScene';
 
 const Game = () => {
   const gameRef = useRef<HTMLDivElement>(null);
@@ -22,7 +23,7 @@ const Game = () => {
       parent: gameRef.current || undefined,
       physics: GAME_CONFIG.physics,
       scale: GAME_CONFIG.scale,
-      scene: [StartMenuScene, MainScene]
+      scene: [StartMenuScene, MainScene, ScoreEntryScene]
     };
 
     gameInstance.current = new Phaser.Game(config);

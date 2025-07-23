@@ -111,7 +111,7 @@ export class GameUI {
     });
   }
 
-  showLeaderboard(scores: (number | {score: number, time: number})[]) {
+  showLeaderboard(scores: (number | {name?: string, score: number, time: number})[]) {
     const leaderboardTitle = 'LEADERBOARD';
     console.log('GameUI Leaderboard data:', scores); // Debug log
     
@@ -121,12 +121,18 @@ export class GameUI {
     } else {
       leaderboardContent = scores.map((entry, index) => {
         console.log('GameUI Processing entry:', entry, 'Type:', typeof entry); // Debug log
-        // Handle both old format (just numbers) and new format (objects with score and time)
+        
         if (typeof entry === 'number') {
+          // Old format - just score
           return `${index + 1}. ${entry.toLocaleString()}`;
-        } else if (entry && typeof entry === 'object' && 'score' in entry && 'time' in entry) {
-          const formattedTime = this.formatTime(entry.time);
-          return `${index + 1}. ${entry.score.toLocaleString()} (${formattedTime})`;
+        } else if (entry && typeof entry === 'object') {
+          // New format with name, score, and time
+          const name = entry.name || 'Anonymous';
+          const score = entry.score || 0;
+          const time = entry.time || 0;
+          const formattedTime = this.formatTime(time);
+          
+          return `${index + 1}. ${name}: ${score.toLocaleString()} (${formattedTime})`;
         } else {
           // Fallback for corrupted data
           return `${index + 1}. Invalid entry`;

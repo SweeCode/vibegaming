@@ -85,8 +85,17 @@ export class StartMenuScene extends Phaser.Scene {
       .on('pointerover', () => this.gameModesButton.setStyle({ backgroundColor: '#660066' }))
       .on('pointerout', () => this.gameModesButton.setStyle({ backgroundColor: '#440044' }));
 
+    // Instructions
+    this.add.text(this.scale.width / 2, this.scale.height - 60, 'Ctrl+Shift+R to reset leaderboard', {
+      fontSize: '16px',
+      color: '#666666'
+    }).setOrigin(0.5);
+
     // Add some decorative elements
     this.createStars();
+    
+    // Setup keyboard shortcuts
+    this.setupKeyboardShortcuts();
   }
 
   private createStars() {
@@ -143,16 +152,23 @@ export class StartMenuScene extends Phaser.Scene {
     if (scores.length === 0) {
       leaderboardText += 'No scores yet!\nPlay a game to set your first score.';
     } else {
-      scores.slice(0, 10).forEach((entry: number | {score: number, time: number}, index: number) => {
+      scores.slice(0, 10).forEach((entry: number | {name?: string, score: number, time: number}, index: number) => {
         console.log('Processing entry:', entry, 'Type:', typeof entry); // Debug log
-        // Handle both old format (just numbers) and new format (objects with score and time)
+        
         if (typeof entry === 'number') {
+          // Old format - just score
           leaderboardText += `${index + 1}. ${entry.toLocaleString()}\n`;
-        } else if (entry && typeof entry === 'object' && 'score' in entry && 'time' in entry) {
-          const minutes = Math.floor(entry.time / 60);
-          const seconds = entry.time % 60;
+        } else if (entry && typeof entry === 'object') {
+          // New format with name, score, and time
+          const name = entry.name || 'Anonymous';
+          const score = entry.score || 0;
+          const time = entry.time || 0;
+          
+          const minutes = Math.floor(time / 60);
+          const seconds = time % 60;
           const formattedTime = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-          leaderboardText += `${index + 1}. ${entry.score.toLocaleString()} (${formattedTime})\n`;
+          
+          leaderboardText += `${index + 1}. ${name}: ${score.toLocaleString()} (${formattedTime})\n`;
         } else {
           // Fallback for corrupted data
           leaderboardText += `${index + 1}. Invalid entry\n`;
@@ -203,6 +219,32 @@ export class StartMenuScene extends Phaser.Scene {
       this.backButton.destroy();
       this.backButton = undefined;
     }
+  }
+
+  private setupKeyboardShortcuts() {
+    // Reset leaderboard with Ctrl+Shift+R
+    this.input.keyboard?.on('keydown', (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.shiftKey && event.key === 'R') {
+        this.resetLeaderboard();
+      }
+    });
+  }
+
+  private resetLeaderboard() {
+    // Clear leaderboard data
+    localStorage.removeItem('leaderboard');
+    
+    // Show confirmation message
+    const confirmText = this.add.text(this.scale.width / 2, this.scale.height - 100, 'Leaderboard Reset!', {
+      fontSize: '32px',
+      color: '#ff0000',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    // Remove message after 2 seconds
+    this.time.delayedCall(2000, () => {
+      confirmText.destroy();
+    });
   }
 
   private showGameModes() {
