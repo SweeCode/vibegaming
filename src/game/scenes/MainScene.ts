@@ -3,6 +3,7 @@ import { GAME_SETTINGS } from '../config/gameConfig';
 import { Player } from '../objects/Player';
 import { Enemy, EnemySpawner } from '../objects/Enemy';
 import { GameUI } from '../ui/GameUI';
+import { ReloadingBar } from '../ui/ReloadingBar';
 
 export class MainScene extends Phaser.Scene {
   private player!: Player;
@@ -10,6 +11,7 @@ export class MainScene extends Phaser.Scene {
   private enemies!: Phaser.Physics.Arcade.Group;
   private enemySpawner!: EnemySpawner;
   private gameUI!: GameUI;
+  private reloadingBar!: ReloadingBar;
   private score = 0;
   private ammo = GAME_SETTINGS.weapons.bullet.maxAmmo;
   private isReloading = false;
@@ -30,6 +32,7 @@ export class MainScene extends Phaser.Scene {
     this.createBullets();
     this.createEnemies();
     this.createUI();
+    this.createReloadingBar();
     this.setupCollisions();
     this.setupSpawnTimer();
     this.setupMouseInput();
@@ -41,6 +44,7 @@ export class MainScene extends Phaser.Scene {
 
     this.updateBullets();
     this.player.update();
+    this.reloadingBar.update();
   }
 
   private createTextures() {
@@ -94,6 +98,10 @@ export class MainScene extends Phaser.Scene {
 
   private createUI() {
     this.gameUI = new GameUI(this);
+  }
+
+  private createReloadingBar() {
+    this.reloadingBar = new ReloadingBar(this, this.player);
   }
 
   private setupCollisions() {
@@ -191,11 +199,13 @@ export class MainScene extends Phaser.Scene {
   private reload() {
     this.isReloading = true;
     this.gameUI.showReloading();
+    this.reloadingBar.show(GAME_SETTINGS.weapons.bullet.reloadTime);
     
     this.time.delayedCall(GAME_SETTINGS.weapons.bullet.reloadTime, () => {
       this.ammo = GAME_SETTINGS.weapons.bullet.maxAmmo;
       this.isReloading = false;
       this.gameUI.updateAmmo(this.ammo);
+      // Note: reloadingBar.hide() is called automatically by the ReloadingBar class
     });
   }
 
@@ -217,6 +227,7 @@ export class MainScene extends Phaser.Scene {
     this.player.reset();
     this.gameUI.reset();
     this.gameUI.hideLeaderboard();
+    this.reloadingBar.hide(); // Hide reloading bar if it's showing
     
     this.enemies.clear(true, true);
     this.bullets.clear(true, true);
