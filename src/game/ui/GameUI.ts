@@ -5,6 +5,7 @@ export class GameUI {
   private scene: Phaser.Scene;
   private scoreText!: Phaser.GameObjects.Text;
   private ammoText!: Phaser.GameObjects.Text;
+  private difficultyText!: Phaser.GameObjects.Text;
   private healthBar!: Phaser.GameObjects.Graphics;
   private gameOverText?: Phaser.GameObjects.Text;
   private restartText?: Phaser.GameObjects.Text;
@@ -25,6 +26,11 @@ export class GameUI {
       fontSize: '32px', 
       color: '#fff' 
     });
+
+    this.difficultyText = this.scene.add.text(16, 84, 'Level 1 - Beginner', {
+      fontSize: '24px',
+      color: '#00ff00'
+    });
     
     // ESC instruction
     this.scene.add.text(16, this.scene.scale.height - 40, 'Press ESC to return to menu', {
@@ -33,7 +39,7 @@ export class GameUI {
     });
     
     this.healthBar = this.scene.add.graphics();
-    this.updateHealthBar(1);
+    this.updateHealthBar(1, 120); // Adjust health bar position down
   }
 
   updateScore(score: number) {
@@ -48,12 +54,23 @@ export class GameUI {
     this.ammoText.setText('Reloading...');
   }
 
-  updateHealthBar(healthPercentage: number) {
+  updateDifficulty(level: number, title: string) {
+    this.difficultyText.setText(`Level ${level} - ${title}`);
+    
+    // Color-code difficulty levels
+    let color = '#00ff00'; // Green for easy levels
+    if (level >= 7) color = '#ff0000'; // Red for hard levels
+    else if (level >= 4) color = '#ffaa00'; // Orange for medium levels
+    
+    this.difficultyText.setColor(color);
+  }
+
+  updateHealthBar(healthPercentage: number, yPosition: number = 90) {
     this.healthBar.clear();
     this.healthBar.fillStyle(0xff0000, 1);
-    this.healthBar.fillRect(16, 90, 200, 20);
+    this.healthBar.fillRect(16, yPosition, 200, 20);
     this.healthBar.fillStyle(0x00ff00, 1);
-    this.healthBar.fillRect(16, 90, 200 * healthPercentage, 20);
+    this.healthBar.fillRect(16, yPosition, 200 * healthPercentage, 20);
   }
 
   showGameOver() {
@@ -109,6 +126,7 @@ export class GameUI {
     
     this.updateScore(0);
     this.updateAmmo(GAME_SETTINGS.weapons.bullet.maxAmmo);
-    this.updateHealthBar(1);
+    this.updateDifficulty(1, 'Beginner');
+    this.updateHealthBar(1, 120);
   }
 }

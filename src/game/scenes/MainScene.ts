@@ -4,6 +4,7 @@ import { Player } from '../objects/Player';
 import { Enemy, EnemySpawner } from '../objects/Enemy';
 import { GameUI } from '../ui/GameUI';
 import { ReloadingBar } from '../ui/ReloadingBar';
+import { DifficultyManager } from '../systems/DifficultyManager';
 
 export class MainScene extends Phaser.Scene {
   private player!: Player;
@@ -12,6 +13,7 @@ export class MainScene extends Phaser.Scene {
   private enemySpawner!: EnemySpawner;
   private gameUI!: GameUI;
   private reloadingBar!: ReloadingBar;
+  private difficultyManager!: DifficultyManager;
   private score = 0;
   private ammo = GAME_SETTINGS.weapons.bullet.maxAmmo;
   private isReloading = false;
@@ -33,6 +35,7 @@ export class MainScene extends Phaser.Scene {
     this.createEnemies();
     this.createUI();
     this.createReloadingBar();
+    this.createDifficultyManager();
     this.setupCollisions();
     this.setupSpawnTimer();
     this.setupMouseInput();
@@ -104,15 +107,20 @@ export class MainScene extends Phaser.Scene {
     this.reloadingBar = new ReloadingBar(this, this.player);
   }
 
+  private createDifficultyManager() {
+    this.difficultyManager = new DifficultyManager();
+  }
+
   private setupCollisions() {
     this.physics.add.collider(this.bullets, this.enemies, this.handleBulletEnemyCollision, undefined, this);
     this.physics.add.collider(this.player, this.enemies, this.handlePlayerEnemyCollision, undefined, this);
   }
 
   private setupSpawnTimer() {
+    const difficulty = this.difficultyManager.getCurrentSettings();
     this.spawnTimer = this.time.addEvent({
-      delay: GAME_SETTINGS.enemies.regular.spawnDelay,
-      callback: () => this.enemySpawner.spawn(),
+      delay: difficulty.spawnDelay,
+      callback: () => this.spawnEnemyWithDifficulty(),
       callbackScope: this,
       loop: true
     });
@@ -142,6 +150,7 @@ export class MainScene extends Phaser.Scene {
     if (isDead) {
       this.score += enemyObj.getScoreValue();
       enemyObj.destroy();
+      this.updateDifficulty();
       this.gameUI.updateScore(this.score);
     }
   }
@@ -217,6 +226,82 @@ export class MainScene extends Phaser.Scene {
     }
   }
 
+  private spawnEnemyWithDifficulty() {
+    const difficulty = this.difficultyManager.getCurrentSettings();
+    
+    // Check if we've reached max enemies on screen
+    const activeEnemies = this.enemies.countActive();
+    if (activeEnemies >= difficulty.maxEnemiesOnScreen) {
+      return;
+    }
+    
+    // Spawn enemy using the difficulty-adjusted enemy spawner
+    this.enemySpawner.spawnWithDifficulty(difficulty);
+  }
+
+  private updateDifficulty() {
+    const levelIncreased = this.difficultyManager.updateDifficulty(this.score);
+    
+    if (levelIncreased) {
+      const difficulty = this.difficultyManager.getCurrentSettings();
+      
+      // Recreate spawn timer with new delay
+      this.spawnTimer.destroy();
+      this.spawnTimer = this.time.addEvent({
+        delay: difficulty.spawnDelay,
+        callback: () => this.spawnEnemyWithDifficulty(),
+        callbackScope: this,
+        loop: true
+      });
+      
+      // Show level up notification
+      this.showLevelUpNotification(difficulty.level, difficulty.title);
+      
+      // Update UI difficulty display
+      this.gameUI.updateDifficulty(difficulty.level, difficulty.title);
+    }
+  }
+
+  private showLevelUpNotification(level: number, title: string) {
+    const centerX = this.scale.width / 2;
+    const centerY = this.scale.height / 2;
+    
+    const levelText = this.add.text(centerX, centerY - 50, `LEVEL ${level}`, {
+      fontSize: '48px',
+      color: '#ffff00',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+    
+    const titleText = this.add.text(centerX, centerY + 10, title.toUpperCase(), {
+      fontSize: '32px',
+      color: '#ffffff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+    
+    // Animate the notification
+    this.tweens.add({
+      targets: [levelText, titleText],
+      alpha: { from: 0, to: 1 },
+      scale: { from: 0.5, to: 1 },
+      duration: 500,
+      ease: 'Back.easeOut'
+    });
+    
+    // Remove after 2 seconds
+    this.time.delayedCall(2000, () => {
+      this.tweens.add({
+        targets: [levelText, titleText],
+        alpha: 0,
+        scale: 0.8,
+        duration: 300,
+        onComplete: () => {
+          levelText.destroy();
+          titleText.destroy();
+        }
+      });
+    });
+  }
+
   private resetGame() {
     this.gameOver = false;
     this.score = 0;
@@ -228,9 +313,20 @@ export class MainScene extends Phaser.Scene {
     this.gameUI.reset();
     this.gameUI.hideLeaderboard();
     this.reloadingBar.hide(); // Hide reloading bar if it's showing
+    this.difficultyManager.reset(); // Reset difficulty
     
     this.enemies.clear(true, true);
     this.bullets.clear(true, true);
+    
+    // Reset spawn timer to initial difficulty
+    const difficulty = this.difficultyManager.getCurrentSettings();
+    this.spawnTimer.destroy();
+    this.spawnTimer = this.time.addEvent({
+      delay: difficulty.spawnDelay,
+      callback: () => this.spawnEnemyWithDifficulty(),
+      callbackScope: this,
+      loop: true
+    });
     
     this.physics.resume();
     this.spawnTimer.paused = false;

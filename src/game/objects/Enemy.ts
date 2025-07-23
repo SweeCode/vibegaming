@@ -1,5 +1,6 @@
 import * as Phaser from 'phaser';
 import { GAME_SETTINGS } from '../config/gameConfig';
+import { DifficultySettings } from '../systems/DifficultyManager';
 
 import { Player } from './Player';
 
@@ -42,13 +43,14 @@ export class RegularEnemy extends Enemy {
   private initialVelocityX: number;
   private initialVelocityY: number;
 
-  constructor(scene: Phaser.Scene, x: number, y: number, target: Player) {
+  constructor(scene: Phaser.Scene, x: number, y: number, target: Player, speedMultiplier: number = 1) {
+    const adjustedSpeed = GAME_SETTINGS.enemies.regular.speed * speedMultiplier;
     super(
       scene, 
       x, 
       y, 
       'enemy', 
-      GAME_SETTINGS.enemies.regular.speed,
+      adjustedSpeed,
       GAME_SETTINGS.enemies.regular.scoreValue,
       1
     );
@@ -66,13 +68,14 @@ export class FastEnemy extends Enemy {
   private initialVelocityX: number;
   private initialVelocityY: number;
 
-  constructor(scene: Phaser.Scene, x: number, y: number, target: Player) {
+  constructor(scene: Phaser.Scene, x: number, y: number, target: Player, speedMultiplier: number = 1) {
+    const adjustedSpeed = GAME_SETTINGS.enemies.fast.speed * speedMultiplier;
     super(
       scene, 
       x, 
       y, 
       'enemy_fast', 
-      GAME_SETTINGS.enemies.fast.speed,
+      adjustedSpeed,
       GAME_SETTINGS.enemies.fast.scoreValue,
       1
     );
@@ -89,13 +92,14 @@ export class FastEnemy extends Enemy {
 export class BigEnemy extends Enemy {
   private target: Player;
 
-  constructor(scene: Phaser.Scene, x: number, y: number, target: Player) {
+  constructor(scene: Phaser.Scene, x: number, y: number, target: Player, speedMultiplier: number = 1) {
+    const adjustedSpeed = GAME_SETTINGS.enemies.big.speed * speedMultiplier;
     super(
       scene, 
       x, 
       y, 
       'enemy_big', 
-      GAME_SETTINGS.enemies.big.speed,
+      adjustedSpeed,
       GAME_SETTINGS.enemies.big.scoreValue,
       GAME_SETTINGS.enemies.big.health
     );
@@ -129,6 +133,22 @@ export class EnemySpawner {
       enemy = new FastEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player);
     } else {
       enemy = new RegularEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player);
+    }
+    
+    this.enemyGroup.add(enemy);
+  }
+
+  spawnWithDifficulty(difficulty: DifficultySettings) {
+    const spawnPoint = this.getRandomSpawnPoint();
+    const spawnChance = Math.random();
+    
+    let enemy: Enemy;
+    if (spawnChance < difficulty.bigEnemyChance) {
+      enemy = new BigEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player, difficulty.enemySpeedMultiplier);
+    } else if (spawnChance < difficulty.fastEnemyChance + difficulty.bigEnemyChance) {
+      enemy = new FastEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player, difficulty.enemySpeedMultiplier);
+    } else {
+      enemy = new RegularEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player, difficulty.enemySpeedMultiplier);
     }
     
     this.enemyGroup.add(enemy);
