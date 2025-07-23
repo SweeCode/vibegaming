@@ -92,7 +92,7 @@ const Game = () => {
       updateHealthBar();
 
       this.physics.add.collider(bullets, enemies, (bullet, enemy) => {
-        bullet.destroy();
+        (bullet as Phaser.GameObjects.Sprite).setActive(false).setVisible(false);
         enemy.destroy();
         score += 10;
         scoreText.setText('Score: ' + score);
@@ -134,6 +134,12 @@ const Game = () => {
 
     function update(this: Phaser.Scene) {
         if (gameOver) return;
+
+        for (const bullet of bullets.getMatching('active', true)) {
+            if (bullet.x < 0 || bullet.x > 800 || bullet.y < 0 || bullet.y > 600) {
+                (bullet as Phaser.GameObjects.Sprite).setActive(false).setVisible(false);
+            }
+        }
 
         const pointer = this.input.activePointer;
         player.rotation = Phaser.Math.Angle.Between(player.x, player.y, pointer.worldX, pointer.worldY);
@@ -191,6 +197,8 @@ const Game = () => {
 
     function updateHealthBar() {
       healthBar.clear();
+      healthBar.fillStyle(0xff0000, 1);
+      healthBar.fillRect(16, 90, 200, 20);
       healthBar.fillStyle(0x00ff00, 1);
       healthBar.fillRect(16, 90, 200 * (health / 100), 20);
     }
