@@ -3,6 +3,7 @@ import * as Phaser from 'phaser';
 export class ScoreEntryScene extends Phaser.Scene {
   private score: number = 0;
   private gameTime: number = 0;
+  private gameMode: string = 'classic'; // 'classic' or 'wave'
   private nameInput!: Phaser.GameObjects.Text;
   private currentName: string = '';
   private maxNameLength: number = 12;
@@ -14,9 +15,10 @@ export class ScoreEntryScene extends Phaser.Scene {
     super({ key: 'ScoreEntryScene' });
   }
 
-  init(data: { score: number, time: number }) {
+  init(data: { score: number, time: number, gameMode?: string }) {
     this.score = data.score;
     this.gameTime = data.time;
+    this.gameMode = data.gameMode || 'classic';
     this.currentName = '';
   }
 
@@ -27,10 +29,17 @@ export class ScoreEntryScene extends Phaser.Scene {
     // Background
     this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0x000033).setOrigin(0, 0);
 
-    // Title
-    this.add.text(centerX, centerY - 150, 'NEW HIGH SCORE!', {
+    // Title with game mode
+    const modeText = this.gameMode === 'wave' ? 'WAVE MODE' : 'CLASSIC MODE';
+    this.add.text(centerX, centerY - 180, 'NEW HIGH SCORE!', {
       fontSize: '48px',
       color: '#ffff00',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    this.add.text(centerX, centerY - 130, modeText, {
+      fontSize: '24px',
+      color: '#ffffff',
       fontStyle: 'bold'
     }).setOrigin(0.5);
 
@@ -130,8 +139,9 @@ export class ScoreEntryScene extends Phaser.Scene {
   private saveScore() {
     const name = this.currentName.trim() || 'Anonymous';
     
-    // Get existing scores
-    const scores = JSON.parse(localStorage.getItem('leaderboard') || '[]');
+    // Get existing scores for the specific game mode
+    const leaderboardKey = this.gameMode === 'wave' ? 'leaderboard_wave' : 'leaderboard';
+    const scores = JSON.parse(localStorage.getItem(leaderboardKey) || '[]');
     
     // Add new score entry
     const newEntry = {
@@ -152,8 +162,8 @@ export class ScoreEntryScene extends Phaser.Scene {
       return a.time - b.time;
     });
     
-    // Keep only top 10
-    localStorage.setItem('leaderboard', JSON.stringify(scores.slice(0, 10)));
+    // Keep only top 10 for the specific game mode
+    localStorage.setItem(leaderboardKey, JSON.stringify(scores.slice(0, 10)));
     
     // Go to start menu
     this.scene.start('StartMenuScene');

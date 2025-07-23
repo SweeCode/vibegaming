@@ -1,0 +1,172 @@
+export interface PlayerStats {
+  health: number;
+  speed: number;
+  maxAmmo: number;
+  reloadSpeed: number;
+  bulletSpeed: number;
+  bulletDamage: number;
+}
+
+export interface UpgradeCosts {
+  health: number;
+  speed: number;
+  maxAmmo: number;
+  reloadSpeed: number;
+  bulletSpeed: number;
+  bulletDamage: number;
+}
+
+export interface UpgradeLevels {
+  health: number;
+  speed: number;
+  maxAmmo: number;
+  reloadSpeed: number;
+  bulletSpeed: number;
+  bulletDamage: number;
+}
+
+export class UpgradeManager {
+  private upgradeLevels: UpgradeLevels;
+  private baseCosts: UpgradeCosts;
+  private maxLevels: UpgradeLevels;
+
+  constructor() {
+    // Initialize upgrade levels from localStorage or defaults
+    this.upgradeLevels = this.loadUpgradeLevels();
+    
+    // Base costs for first upgrade level
+    this.baseCosts = {
+      health: 100,
+      speed: 150,
+      maxAmmo: 200,
+      reloadSpeed: 250,
+      bulletSpeed: 300,
+      bulletDamage: 400
+    };
+
+    // Maximum upgrade levels
+    this.maxLevels = {
+      health: 10,
+      speed: 10,
+      maxAmmo: 10,
+      reloadSpeed: 10,
+      bulletSpeed: 10,
+      bulletDamage: 10
+    };
+  }
+
+  private loadUpgradeLevels(): UpgradeLevels {
+    const saved = localStorage.getItem('upgradeLevels');
+    if (saved) {
+      return JSON.parse(saved);
+    }
+    return {
+      health: 0,
+      speed: 0,
+      maxAmmo: 0,
+      reloadSpeed: 0,
+      bulletSpeed: 0,
+      bulletDamage: 0
+    };
+  }
+
+  private saveUpgradeLevels(): void {
+    localStorage.setItem('upgradeLevels', JSON.stringify(this.upgradeLevels));
+  }
+
+  getUpgradeLevels(): UpgradeLevels {
+    return { ...this.upgradeLevels };
+  }
+
+  getUpgradeCost(stat: keyof UpgradeLevels): number {
+    const currentLevel = this.upgradeLevels[stat];
+    const baseCost = this.baseCosts[stat];
+    
+    // Exponential cost increase: baseCost * (1.5 ^ currentLevel)
+    return Math.floor(baseCost * Math.pow(1.5, currentLevel));
+  }
+
+  canUpgrade(stat: keyof UpgradeLevels, currentScore: number): boolean {
+    const currentLevel = this.upgradeLevels[stat];
+    const maxLevel = this.maxLevels[stat];
+    const cost = this.getUpgradeCost(stat);
+    
+    return currentLevel < maxLevel && currentScore >= cost;
+  }
+
+  isMaxLevel(stat: keyof UpgradeLevels): boolean {
+    return this.upgradeLevels[stat] >= this.maxLevels[stat];
+  }
+
+  upgrade(stat: keyof UpgradeLevels, currentScore: number): { success: boolean; newScore: number; cost: number } {
+    if (!this.canUpgrade(stat, currentScore)) {
+      return { success: false, newScore: currentScore, cost: this.getUpgradeCost(stat) };
+    }
+
+    const cost = this.getUpgradeCost(stat);
+    this.upgradeLevels[stat]++;
+    this.saveUpgradeLevels();
+    
+    return { 
+      success: true, 
+      newScore: currentScore - cost, 
+      cost 
+    };
+  }
+
+  getPlayerStats(): PlayerStats {
+    const baseStats = {
+      health: 100,
+      speed: 200,
+      maxAmmo: 10,
+      reloadSpeed: 2000,
+      bulletSpeed: 400,
+      bulletDamage: 1
+    };
+
+    // Calculate upgraded stats
+    return {
+      health: baseStats.health + (this.upgradeLevels.health * 25), // +25 health per level
+      speed: baseStats.speed + (this.upgradeLevels.speed * 20), // +20 speed per level
+      maxAmmo: baseStats.maxAmmo + (this.upgradeLevels.maxAmmo * 2), // +2 ammo per level
+      reloadSpeed: Math.max(500, baseStats.reloadSpeed - (this.upgradeLevels.reloadSpeed * 150)), // -150ms per level, min 500ms
+      bulletSpeed: baseStats.bulletSpeed + (this.upgradeLevels.bulletSpeed * 50), // +50 speed per level
+      bulletDamage: baseStats.bulletDamage + (this.upgradeLevels.bulletDamage * 1) // +1 damage per level
+    };
+  }
+
+  getStatIncrease(stat: keyof UpgradeLevels): number {
+    switch (stat) {
+      case 'health': return 25;
+      case 'speed': return 20;
+      case 'maxAmmo': return 2;
+      case 'reloadSpeed': return 150; // This is a reduction in reload time
+      case 'bulletSpeed': return 50;
+      case 'bulletDamage': return 1;
+      default: return 0;
+    }
+  }
+
+  getTotalSpent(): number {
+    let total = 0;
+    for (const stat of Object.keys(this.upgradeLevels) as Array<keyof UpgradeLevels>) {
+      for (let level = 0; level < this.upgradeLevels[stat]; level++) {
+        const baseCost = this.baseCosts[stat];
+        total += Math.floor(baseCost * Math.pow(1.5, level));
+      }
+    }
+    return total;
+  }
+
+  resetUpgrades(): void {
+    this.upgradeLevels = {
+      health: 0,
+      speed: 0,
+      maxAmmo: 0,
+      reloadSpeed: 0,
+      bulletSpeed: 0,
+      bulletDamage: 0
+    };
+    this.saveUpgradeLevels();
+  }
+}

@@ -1,36 +1,216 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Space Shooter Game
 
-## Getting Started
+A modern web-based space shooter game built with Next.js, TypeScript, and Phaser.js featuring progressive difficulty, upgrade systems, and multiple game modes.
 
-First, run the development server:
+## 🎮 Features
 
+### Game Modes
+- **Classic Mode**: Endless survival with progressive difficulty scaling
+- **Wave Mode**: Structured wave-based combat with breaks between waves
+
+### Upgrade System
+- **6 Upgradeable Stats**: Health, Speed, Max Ammo, Reload Speed, Bullet Speed, Bullet Damage
+- **Score-Based Currency**: Spend points earned from gameplay
+- **Progressive Costs**: Each upgrade level costs more (1.5x multiplier)
+- **Persistent Storage**: Upgrades saved between sessions
+
+### Core Gameplay
+- **WASD Movement**: Smooth directional controls
+- **Mouse Aiming**: Point and click to shoot
+- **Pause System**: ESC to pause, resume or quit
+- **Health System**: Take damage and heal between rounds
+- **Ammo Management**: Limited ammo with reload mechanics
+
+### Visual Features
+- **Swedish Theme**: Nordic-inspired main menu design
+- **Real-time UI**: Health bars, ammo counters, score tracking
+- **Wave Notifications**: Clear progression indicators
+- **Customization Menu**: Character preview and stats display
+
+## 🚀 Getting Started
+
+### Prerequisites
+- Node.js 18+ 
+- npm or yarn
+
+### Installation
 ```bash
+# Clone the repository
+git clone <your-repo-url>
+cd my-app
+
+# Install dependencies
+npm install
+
+# Start development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) with your browser to play the game.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Building for Production
+```bash
+# Build the application
+npm run build
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+# Start production server
+npm start
+```
 
-## Learn More
+## 🎯 How to Play
 
-To learn more about Next.js, take a look at the following resources:
+### Controls
+- **WASD**: Move your character
+- **Mouse**: Aim and shoot
+- **ESC**: Pause game
+- **Left Click**: Fire weapon
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Game Modes
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+#### Classic Mode
+- Endless survival gameplay
+- Progressive difficulty every few points
+- Enemies spawn continuously
+- Survive as long as possible
 
-## Deploy on Vercel
+#### Wave Mode  
+- Structured wave-based progression
+- 3-second breaks between waves
+- Increasing enemy counts and variety
+- Clear objectives per wave
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Upgrade System
+1. **Earn Points**: Play either game mode to earn score points
+2. **Access Customization**: Click "CUSTOMIZE" from main menu
+3. **Purchase Upgrades**: Spend points on 6 different stats
+4. **See Immediate Effects**: Upgrades apply instantly in-game
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+#### Available Upgrades
+| Stat | Effect | Base Value | Per Level |
+|------|--------|------------|-----------|
+| Health | Maximum HP | 100 | +25 |
+| Speed | Movement speed | 200 px/s | +20 |
+| Max Ammo | Bullet capacity | 10 | +2 |
+| Reload Speed | Reload time | 2000ms | -150ms |
+| Bullet Speed | Projectile speed | 400 px/s | +50 |
+| Bullet Damage | Damage per hit | 1 | +1 |
+
+## 📁 Project Structure
+
+```
+src/
+├── app/                    # Next.js app directory
+├── components/             # React components
+│   └── Game.tsx           # Main game component
+└── game/                  # Phaser game code
+    ├── config/            # Game configuration
+    ├── objects/           # Game entities
+    │   ├── Player.ts      # Player character
+    │   └── Enemy.ts       # Enemy types and spawning
+    ├── scenes/            # Game scenes
+    │   ├── StartMenuScene.ts      # Main menu
+    │   ├── MainScene.ts           # Classic mode gameplay
+    │   ├── WaveScene.ts           # Wave mode gameplay
+    │   ├── PauseMenuScene.ts      # Pause overlay
+    │   ├── ScoreEntryScene.ts     # Name entry for scores
+    │   └── CustomizationScene.ts  # Upgrade interface
+    ├── systems/           # Game systems
+    │   ├── DifficultyManager.ts   # Classic mode difficulty
+    │   ├── WaveManager.ts         # Wave mode progression
+    │   └── UpgradeManager.ts      # Character upgrades
+    └── ui/                # UI components
+        ├── GameUI.ts      # In-game interface
+        └── ReloadingBar.ts # Reload progress indicator
+```
+
+## 🛠 Technical Details
+
+### Technologies Used
+- **Next.js 15.4.3**: React framework
+- **TypeScript**: Type-safe JavaScript
+- **Phaser.js 3.90.0**: Game engine
+- **LocalStorage**: Data persistence
+
+### Key Systems
+
+#### Upgrade System Architecture
+```typescript
+interface PlayerStats {
+  health: number;
+  speed: number;
+  maxAmmo: number;
+  reloadSpeed: number;
+  bulletSpeed: number;
+  bulletDamage: number;
+}
+```
+
+#### Scene Management
+- Proper scene lifecycle management
+- Data passing between scenes
+- Timer cleanup on scene transitions
+- Pause/resume functionality
+
+#### Data Persistence
+- Upgrade levels stored in localStorage
+- Separate leaderboards for each game mode
+- Score accumulation across sessions
+
+## 🎨 Customization
+
+### Adding New Upgrades
+1. Add to `PlayerStats` interface in `UpgradeManager.ts`
+2. Define base cost and effect in upgrade system
+3. Update customization UI
+4. Apply effects in game scenes
+
+### Creating New Enemy Types
+1. Extend `Enemy` class in `Enemy.ts`
+2. Add to enemy spawning logic
+3. Configure in wave/difficulty systems
+
+### Adding New Scenes
+1. Create scene class extending `Phaser.Scene`
+2. Add to scene list in `Game.tsx`
+3. Handle transitions and data passing
+
+## 🐛 Known Issues
+
+- None currently reported
+
+## 🔮 Future Features
+
+The architecture is designed to easily support:
+- **Character Classes**: Different player types with unique abilities
+- **Weapon Varieties**: Multiple weapon types with distinct characteristics
+- **Equipment System**: Armor, shields, and special items
+- **Skill Trees**: Branching upgrade paths
+- **Multiplayer**: Co-op or competitive modes
+- **Sound Effects**: Audio feedback and music
+- **Achievements**: Unlockable goals and rewards
+
+## 📝 Development Notes
+
+### Adding New Features
+- Follow existing patterns for scene management
+- Use TypeScript interfaces for type safety
+- Implement proper cleanup in `shutdown()` methods
+- Store persistent data in localStorage with versioning
+
+### Performance Considerations
+- Object pooling for bullets and enemies
+- Proper sprite destruction to prevent memory leaks
+- Efficient collision detection
+- Timer cleanup on scene transitions
+
+## 📄 License
+
+This project is for educational and personal use.
+
+## 🤝 Contributing
+
+This is a personal project, but suggestions and feedback are welcome!
+
+---
+
+**Enjoy your space adventure!** 🚀✨

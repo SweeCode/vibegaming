@@ -6,6 +6,9 @@ import { GAME_CONFIG } from '@/game/config/gameConfig';
 import { MainScene } from '@/game/scenes/MainScene';
 import { StartMenuScene } from '@/game/scenes/StartMenuScene';
 import { ScoreEntryScene } from '@/game/scenes/ScoreEntryScene';
+import { PauseMenuScene } from '@/game/scenes/PauseMenuScene';
+import { WaveScene } from '@/game/scenes/WaveScene';
+import { CustomizationScene } from '@/game/scenes/CustomizationScene';
 
 const Game = () => {
   const gameRef = useRef<HTMLDivElement>(null);
@@ -23,7 +26,7 @@ const Game = () => {
       parent: gameRef.current || undefined,
       physics: GAME_CONFIG.physics,
       scale: GAME_CONFIG.scale,
-      scene: [StartMenuScene, MainScene, ScoreEntryScene]
+      scene: [StartMenuScene, MainScene, WaveScene, ScoreEntryScene, PauseMenuScene, CustomizationScene]
     };
 
     gameInstance.current = new Phaser.Game(config);

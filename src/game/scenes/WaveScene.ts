@@ -4,17 +4,17 @@ import { Player } from '../objects/Player';
 import { Enemy, EnemySpawner } from '../objects/Enemy';
 import { GameUI } from '../ui/GameUI';
 import { ReloadingBar } from '../ui/ReloadingBar';
-import { DifficultyManager } from '../systems/DifficultyManager';
+import { WaveManager } from '../systems/WaveManager';
 import { UpgradeManager } from '../systems/UpgradeManager';
 
-export class MainScene extends Phaser.Scene {
+export class WaveScene extends Phaser.Scene {
   private player!: Player;
   private bullets!: Phaser.Physics.Arcade.Group;
   private enemies!: Phaser.Physics.Arcade.Group;
   private enemySpawner!: EnemySpawner;
   private gameUI!: GameUI;
   private reloadingBar!: ReloadingBar;
-  private difficultyManager!: DifficultyManager;
+  private waveManager!: WaveManager;
   private upgradeManager!: UpgradeManager;
   private score = 0;
   private ammo = GAME_SETTINGS.weapons.bullet.maxAmmo;
@@ -22,16 +22,24 @@ export class MainScene extends Phaser.Scene {
   private isReloading = false;
   private gameOver = false;
   private gameStartTime: number = 0;
-  private spawnTimer!: Phaser.Time.TimerEvent;
+  private spawnTimer?: Phaser.Time.TimerEvent;
+  private breakTimer?: Phaser.Time.TimerEvent;
+  private waveText?: Phaser.GameObjects.Text;
+  private breakText?: Phaser.GameObjects.Text;
 
   constructor() {
-    super({ key: 'MainScene' });
+    super({ key: 'WaveScene' });
   }
 
   shutdown() {
     // Clean up timers when scene is stopped
     if (this.spawnTimer) {
       this.spawnTimer.destroy();
+      this.spawnTimer = undefined;
+    }
+    if (this.breakTimer) {
+      this.breakTimer.destroy();
+      this.breakTimer = undefined;
     }
   }
 
@@ -40,20 +48,19 @@ export class MainScene extends Phaser.Scene {
   }
 
   create() {
-    this.gameStartTime = Date.now(); // Start the timer
+    this.gameStartTime = Date.now();
     this.upgradeManager = new UpgradeManager();
     this.initializePlayerStats();
     this.createPlayer();
-    this.createInputs();
     this.createBullets();
     this.createEnemies();
     this.createUI();
     this.createReloadingBar();
-    this.createDifficultyManager();
+    this.createWaveManager();
     this.setupCollisions();
-    this.setupSpawnTimer();
     this.setupMouseInput();
     this.setupKeyboardInput();
+    this.startFirstWave();
   }
 
   private initializePlayerStats() {
@@ -66,10 +73,11 @@ export class MainScene extends Phaser.Scene {
     if (this.gameOver) return;
 
     this.updateBullets();
-    this.updateEnemies(); // Add enemy cleanup
+    this.updateEnemies();
     if (this.player) this.player.update();
     if (this.reloadingBar) this.reloadingBar.update();
-    this.updateTimer(); // Update timer display
+    this.updateTimer();
+    this.updateWaveSystem();
   }
 
   private createTextures() {
@@ -103,10 +111,6 @@ export class MainScene extends Phaser.Scene {
     this.player = new Player(this, this.scale.width / 2, this.scale.height / 2);
   }
 
-  private createInputs() {
-    // Input handling moved to Player class
-  }
-
   private createBullets() {
     this.bullets = this.physics.add.group({
       defaultKey: 'bullet',
@@ -129,8 +133,8 @@ export class MainScene extends Phaser.Scene {
     this.reloadingBar = new ReloadingBar(this, this.player);
   }
 
-  private createDifficultyManager() {
-    this.difficultyManager = new DifficultyManager();
+  private createWaveManager() {
+    this.waveManager = new WaveManager();
   }
 
   private setupCollisions() {
@@ -138,22 +142,11 @@ export class MainScene extends Phaser.Scene {
     this.physics.add.collider(this.player, this.enemies, this.handlePlayerEnemyCollision, undefined, this);
   }
 
-  private setupSpawnTimer() {
-    const difficulty = this.difficultyManager.getCurrentSettings();
-    this.spawnTimer = this.time.addEvent({
-      delay: difficulty.spawnDelay,
-      callback: () => this.spawnEnemyWithDifficulty(),
-      callbackScope: this,
-      loop: true
-    });
-  }
-
   private setupMouseInput() {
     this.input.on('pointerdown', this.handleShoot, this);
   }
 
   private setupKeyboardInput() {
-    // ESC key to pause game
     this.input.keyboard?.on('keydown-ESC', () => {
       if (!this.gameOver) {
         this.pauseGame();
@@ -162,16 +155,156 @@ export class MainScene extends Phaser.Scene {
   }
 
   private pauseGame() {
-    // Pause the current scene and launch pause menu
     this.scene.pause();
-    this.scene.launch('PauseMenuScene', { parentScene: 'MainScene' });
+    this.scene.launch('PauseMenuScene', { parentScene: 'WaveScene' });
+  }
+
+  private startFirstWave() {
+    this.waveManager.startWave();
+    this.showWaveNotification();
+    this.setupSpawnTimer();
+  }
+
+  private setupSpawnTimer() {
+    const waveSettings = this.waveManager.getCurrentWaveSettings();
+    console.log(`Setting up spawn timer for wave ${waveSettings.waveNumber}: ${waveSettings.enemyCount} enemies, ${waveSettings.spawnDelay}ms delay`);
+    
+    if (this.spawnTimer) {
+      this.spawnTimer.destroy();
+    }
+
+    this.spawnTimer = this.time.addEvent({
+      delay: waveSettings.spawnDelay,
+      callback: () => this.spawnEnemyWithWave(),
+      callbackScope: this,
+      loop: true
+    });
+  }
+
+  private spawnEnemyWithWave() {
+    if (!this.waveManager.canSpawnEnemy()) {
+      console.log('Cannot spawn enemy - wave complete or inactive');
+      return;
+    }
+
+    const waveSettings = this.waveManager.getCurrentWaveSettings();
+    console.log(`Spawning enemy for wave ${waveSettings.waveNumber}`);
+    
+    // Use wave-based enemy spawning
+    this.enemySpawner.spawnWithWave(waveSettings);
+    this.waveManager.onEnemySpawned();
+  }
+
+  private updateWaveSystem() {
+    if (this.waveManager.isOnBreak()) {
+      return; // Break timer handles wave progression
+    }
+
+    const waveProgress = this.waveManager.getWaveProgress();
+    const activeEnemies = this.enemies.countActive();
+    
+    // Debug logging
+    console.log(`Wave ${this.waveManager.getCurrentWave()}: Spawned ${waveProgress.spawned}/${waveProgress.total}, Killed ${waveProgress.killed}/${waveProgress.total}, Active: ${activeEnemies}`);
+
+    if (this.waveManager.isWaveComplete() && activeEnemies === 0) {
+      console.log('Wave completed! Starting break...');
+      // Wave completed, start break
+      this.waveManager.startBreak();
+      this.showBreakNotification();
+      
+      const waveSettings = this.waveManager.getCurrentWaveSettings();
+      this.breakTimer = this.time.delayedCall(waveSettings.breakDuration, () => {
+        this.startNextWave();
+      });
+    }
+  }
+
+  private startNextWave() {
+    console.log('Starting next wave...');
+    this.waveManager.endBreak();
+    this.waveManager.startWave();
+    console.log(`Now on wave ${this.waveManager.getCurrentWave()}`);
+    this.showWaveNotification();
+    this.setupSpawnTimer();
+    this.hideBreakNotification();
+  }
+
+  private showWaveNotification() {
+    const waveSettings = this.waveManager.getCurrentWaveSettings();
+    const centerX = this.scale.width / 2;
+    const centerY = this.scale.height / 2;
+
+    this.waveText = this.add.text(centerX, centerY - 50, `WAVE ${waveSettings.waveNumber}`, {
+      fontSize: '48px',
+      color: '#ffff00',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    const titleText = this.add.text(centerX, centerY + 10, waveSettings.title.toUpperCase(), {
+      fontSize: '28px',
+      color: '#ffffff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    // Animate notification
+    this.tweens.add({
+      targets: [this.waveText, titleText],
+      alpha: { from: 0, to: 1 },
+      scale: { from: 0.5, to: 1 },
+      duration: 500,
+      ease: 'Back.easeOut'
+    });
+
+    // Remove after 3 seconds
+    this.time.delayedCall(3000, () => {
+      this.tweens.add({
+        targets: [this.waveText, titleText],
+        alpha: 0,
+        scale: 0.8,
+        duration: 300,
+        onComplete: () => {
+          this.waveText?.destroy();
+          titleText.destroy();
+        }
+      });
+    });
+
+    // Update UI to show wave info
+    this.gameUI.updateDifficulty(waveSettings.waveNumber, waveSettings.title);
+  }
+
+  private showBreakNotification() {
+    const centerX = this.scale.width / 2;
+    const centerY = this.scale.height / 2;
+
+    this.breakText = this.add.text(centerX, centerY, 'WAVE CLEARED!\nPreparing next wave...', {
+      fontSize: '32px',
+      color: '#00ff00',
+      fontStyle: 'bold',
+      align: 'center'
+    }).setOrigin(0.5);
+
+    // Pulse animation
+    this.tweens.add({
+      targets: this.breakText,
+      scale: { from: 1, to: 1.1 },
+      duration: 1000,
+      yoyo: true,
+      repeat: -1
+    });
+  }
+
+  private hideBreakNotification() {
+    if (this.breakText) {
+      this.breakText.destroy();
+      this.breakText = undefined;
+    }
   }
 
   private handleBulletEnemyCollision(bullet: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile, enemy: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile) {
     const bulletObj = bullet as Phaser.GameObjects.Sprite;
     const enemyObj = enemy as Enemy;
 
-    // Don't process if bullet is already inactive or enemy is already destroyed
     if (!bulletObj.active || !enemyObj.active) return;
 
     bulletObj.setActive(false).setVisible(false);
@@ -180,14 +313,24 @@ export class MainScene extends Phaser.Scene {
     if (isDead) {
       this.score += enemyObj.getScoreValue();
       enemyObj.destroy();
-      this.updateDifficulty();
+      this.waveManager.onEnemyKilled();
+      console.log(`Enemy killed! Wave progress: ${this.waveManager.getWaveProgress().killed}/${this.waveManager.getWaveProgress().total}`);
       this.gameUI.updateScore(this.score);
     }
   }
 
   private handlePlayerEnemyCollision(player: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile, enemy: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile) {
     const enemyObj = enemy as Enemy;
+    
+    // Award score for enemy collision
+    this.score += enemyObj.getScoreValue();
+    this.gameUI.updateScore(this.score);
+    
     enemyObj.destroy();
+    
+    // Count this as an enemy killed for wave progression
+    this.waveManager.onEnemyKilled();
+    console.log(`Enemy destroyed by collision! Wave progress: ${this.waveManager.getWaveProgress().killed}/${this.waveManager.getWaveProgress().total}`);
     
     const isDead = this.player.takeDamage(GAME_SETTINGS.player.damagePerHit);
     this.gameUI.updateHealthBar(this.player.getHealthPercentage());
@@ -199,7 +342,8 @@ export class MainScene extends Phaser.Scene {
 
   private handleGameOver() {
     this.physics.pause();
-    this.spawnTimer.paused = true;
+    if (this.spawnTimer) this.spawnTimer.paused = true;
+    if (this.breakTimer) this.breakTimer.paused = true;
     this.player.setTint(0xff0000);
     this.gameOver = true;
     this.gameUI.showGameOver();
@@ -209,9 +353,12 @@ export class MainScene extends Phaser.Scene {
   private promptScoreEntry() {
     const gameTime = this.getGameTime();
     
-    // Delay to show game over screen briefly, then show score entry
     this.time.delayedCall(2000, () => {
-      this.scene.start('ScoreEntryScene', { score: this.score, time: gameTime });
+      this.scene.start('ScoreEntryScene', { 
+        score: this.score, 
+        time: gameTime,
+        gameMode: 'wave' // Identify this as wave mode
+      });
     });
   }
 
@@ -247,7 +394,6 @@ export class MainScene extends Phaser.Scene {
       this.ammo = playerStats.maxAmmo;
       this.isReloading = false;
       this.gameUI.updateAmmo(this.ammo);
-      // Note: reloadingBar.hide() is called automatically by the ReloadingBar class
     });
   }
 
@@ -264,14 +410,20 @@ export class MainScene extends Phaser.Scene {
   private updateEnemies() {
     if (!this.enemies) return;
     
-    // Clean up enemies that have gone off-screen
-    const margin = 100; // Give some margin before cleanup
+    const margin = 100;
     for (const enemy of this.enemies.getMatching('active', true)) {
-      const enemySprite = enemy as Phaser.GameObjects.Sprite;
+      const enemySprite = enemy as Enemy;
       if (enemySprite.x < -margin || 
           enemySprite.x > this.scale.width + margin || 
           enemySprite.y < -margin || 
           enemySprite.y > this.scale.height + margin) {
+        // Award score for off-screen enemies (they "escaped" but still count)
+        this.score += enemySprite.getScoreValue();
+        this.gameUI.updateScore(this.score);
+        
+        // Count off-screen enemies as killed for wave progression
+        this.waveManager.onEnemyKilled();
+        console.log(`Enemy went off-screen! Wave progress: ${this.waveManager.getWaveProgress().killed}/${this.waveManager.getWaveProgress().total}`);
         enemySprite.destroy();
       }
     }
@@ -288,82 +440,6 @@ export class MainScene extends Phaser.Scene {
     return Math.floor((Date.now() - this.gameStartTime) / 1000);
   }
 
-  private spawnEnemyWithDifficulty() {
-    const difficulty = this.difficultyManager.getCurrentSettings();
-    
-    // Check if we've reached max enemies on screen
-    const activeEnemies = this.enemies.countActive();
-    if (activeEnemies >= difficulty.maxEnemiesOnScreen) {
-      return;
-    }
-    
-    // Spawn enemy using the difficulty-adjusted enemy spawner
-    this.enemySpawner.spawnWithDifficulty(difficulty);
-  }
-
-  private updateDifficulty() {
-    const levelIncreased = this.difficultyManager.updateDifficulty(this.score);
-    
-    if (levelIncreased) {
-      const difficulty = this.difficultyManager.getCurrentSettings();
-      
-      // Recreate spawn timer with new delay
-      this.spawnTimer.destroy();
-      this.spawnTimer = this.time.addEvent({
-        delay: difficulty.spawnDelay,
-        callback: () => this.spawnEnemyWithDifficulty(),
-        callbackScope: this,
-        loop: true
-      });
-      
-      // Show level up notification
-      this.showLevelUpNotification(difficulty.level, difficulty.title);
-      
-      // Update UI difficulty display
-      this.gameUI.updateDifficulty(difficulty.level, difficulty.title);
-    }
-  }
-
-  private showLevelUpNotification(level: number, title: string) {
-    const centerX = this.scale.width / 2;
-    const centerY = this.scale.height / 2;
-    
-    const levelText = this.add.text(centerX, centerY - 50, `LEVEL ${level}`, {
-      fontSize: '48px',
-      color: '#ffff00',
-      fontStyle: 'bold'
-    }).setOrigin(0.5);
-    
-    const titleText = this.add.text(centerX, centerY + 10, title.toUpperCase(), {
-      fontSize: '32px',
-      color: '#ffffff',
-      fontStyle: 'bold'
-    }).setOrigin(0.5);
-    
-    // Animate the notification
-    this.tweens.add({
-      targets: [levelText, titleText],
-      alpha: { from: 0, to: 1 },
-      scale: { from: 0.5, to: 1 },
-      duration: 500,
-      ease: 'Back.easeOut'
-    });
-    
-    // Remove after 2 seconds
-    this.time.delayedCall(2000, () => {
-      this.tweens.add({
-        targets: [levelText, titleText],
-        alpha: 0,
-        scale: 0.8,
-        duration: 300,
-        onComplete: () => {
-          levelText.destroy();
-          titleText.destroy();
-        }
-      });
-    });
-  }
-
   private resetGame() {
     this.gameOver = false;
     this.score = 0;
@@ -372,29 +448,21 @@ export class MainScene extends Phaser.Scene {
     this.initializePlayerStats();
     
     this.isReloading = false;
-    this.gameStartTime = Date.now(); // Reset timer
+    this.gameStartTime = Date.now();
     
     this.player.setPosition(this.scale.width / 2, this.scale.height / 2);
     this.player.reset();
     this.gameUI.reset();
-    this.gameUI.hideLeaderboard();
-    this.reloadingBar.hide(); // Hide reloading bar if it's showing
-    this.difficultyManager.reset(); // Reset difficulty
+    this.reloadingBar.hide();
+    this.waveManager.reset();
     
     this.enemies.clear(true, true);
     this.bullets.clear(true, true);
     
-    // Reset spawn timer to initial difficulty
-    const difficulty = this.difficultyManager.getCurrentSettings();
-    this.spawnTimer.destroy();
-    this.spawnTimer = this.time.addEvent({
-      delay: difficulty.spawnDelay,
-      callback: () => this.spawnEnemyWithDifficulty(),
-      callbackScope: this,
-      loop: true
-    });
+    if (this.spawnTimer) this.spawnTimer.destroy();
+    if (this.breakTimer) this.breakTimer.destroy();
     
     this.physics.resume();
-    this.spawnTimer.paused = false;
+    this.startFirstWave();
   }
 }

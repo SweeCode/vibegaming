@@ -8,6 +8,7 @@ export class GameUI {
   private timerText!: Phaser.GameObjects.Text;
   private difficultyText!: Phaser.GameObjects.Text;
   private healthBar!: Phaser.GameObjects.Graphics;
+  private healthText!: Phaser.GameObjects.Text;
   private gameOverText?: Phaser.GameObjects.Text;
   private restartText?: Phaser.GameObjects.Text;
   private leaderboardText?: Phaser.GameObjects.Text;
@@ -45,7 +46,15 @@ export class GameUI {
     });
     
     this.healthBar = this.scene.add.graphics();
-    this.updateHealthBar(1, 150); // Adjust health bar position down
+    
+    // Create health text object that will be positioned with the health bar
+    this.healthText = this.scene.add.text(0, 0, '100%', {
+      fontSize: '16px',
+      color: '#ffffff',
+      fontStyle: 'bold'
+    });
+    
+    this.updateHealthBar(1); // Health bar will position itself at bottom
   }
 
   updateScore(score: number) {
@@ -82,12 +91,32 @@ export class GameUI {
     this.difficultyText.setColor(color);
   }
 
-  updateHealthBar(healthPercentage: number, yPosition: number = 90) {
+  updateHealthBar(healthPercentage: number) {
     this.healthBar.clear();
+    
+    // Position health bar at bottom of screen
+    const barWidth = 300;
+    const barHeight = 25;
+    const margin = 20;
+    const yPosition = this.scene.scale.height - barHeight - margin;
+    const xPosition = margin;
+    
+    // Background (red)
     this.healthBar.fillStyle(0xff0000, 1);
-    this.healthBar.fillRect(16, yPosition, 200, 20);
+    this.healthBar.fillRect(xPosition, yPosition, barWidth, barHeight);
+    
+    // Health (green)
     this.healthBar.fillStyle(0x00ff00, 1);
-    this.healthBar.fillRect(16, yPosition, 200 * healthPercentage, 20);
+    this.healthBar.fillRect(xPosition, yPosition, barWidth * healthPercentage, barHeight);
+    
+    // Border
+    this.healthBar.lineStyle(2, 0xffffff, 1);
+    this.healthBar.strokeRect(xPosition, yPosition, barWidth, barHeight);
+    
+    // Update health text and position it next to the health bar
+    const healthText = `${Math.ceil(healthPercentage * 100)}%`;
+    this.healthText.setText(healthText);
+    this.healthText.setPosition(xPosition + barWidth + 10, yPosition + (barHeight / 2) - 8); // Center vertically next to bar
   }
 
   showGameOver() {
@@ -171,6 +200,6 @@ export class GameUI {
     this.updateAmmo(GAME_SETTINGS.weapons.bullet.maxAmmo);
     this.updateTimer(0);
     this.updateDifficulty(1, 'Beginner');
-    this.updateHealthBar(1, 150);
+    this.updateHealthBar(1);
   }
 }

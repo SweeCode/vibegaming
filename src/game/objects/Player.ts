@@ -1,10 +1,12 @@
 import * as Phaser from 'phaser';
-import { GAME_SETTINGS } from '../config/gameConfig';
+import { UpgradeManager } from '../systems/UpgradeManager';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   private keys: { [key: string]: Phaser.Input.Keyboard.Key };
   private health: number;
   private maxHealth: number;
+  private upgradeManager: UpgradeManager;
+  private playerStats: { health: number; speed: number; maxAmmo: number; reloadSpeed: number; bulletSpeed: number; bulletDamage: number };
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'player');
@@ -14,8 +16,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     
     this.setCollideWorldBounds(true);
     
-    this.health = GAME_SETTINGS.player.maxHealth;
-    this.maxHealth = GAME_SETTINGS.player.maxHealth;
+    // Initialize upgrade system and get current stats
+    this.upgradeManager = new UpgradeManager();
+    this.playerStats = this.upgradeManager.getPlayerStats();
+    
+    this.health = this.playerStats.health;
+    this.maxHealth = this.playerStats.health;
     
     this.keys = scene.input.keyboard?.addKeys('W,A,S,D') as { [key: string]: Phaser.Input.Keyboard.Key } || {};
   }
@@ -36,7 +42,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   private updateMovement() {
-    const speed = GAME_SETTINGS.player.speed;
+    const speed = this.playerStats.speed; // Use upgraded speed
     let velocityX = 0;
     let velocityY = 0;
 
@@ -70,8 +76,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   reset() {
+    // Refresh stats in case upgrades were purchased
+    this.playerStats = this.upgradeManager.getPlayerStats();
+    this.maxHealth = this.playerStats.health;
     this.health = this.maxHealth;
     this.clearTint();
     // Position will be set by the scene
+  }
+
+  getPlayerStats() {
+    return this.playerStats;
   }
 }

@@ -1,6 +1,7 @@
 import * as Phaser from 'phaser';
 import { GAME_SETTINGS } from '../config/gameConfig';
 import { DifficultySettings } from '../systems/DifficultyManager';
+import { WaveSettings } from '../systems/WaveManager';
 
 import { Player } from './Player';
 
@@ -149,6 +150,22 @@ export class EnemySpawner {
       enemy = new FastEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player, difficulty.enemySpeedMultiplier);
     } else {
       enemy = new RegularEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player, difficulty.enemySpeedMultiplier);
+    }
+    
+    this.enemyGroup.add(enemy);
+  }
+
+  spawnWithWave(waveSettings: WaveSettings) {
+    const spawnPoint = this.getRandomSpawnPoint();
+    const spawnChance = Math.random();
+    
+    let enemy: Enemy;
+    if (spawnChance < waveSettings.enemyTypes.big) {
+      enemy = new BigEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player);
+    } else if (spawnChance < waveSettings.enemyTypes.big + waveSettings.enemyTypes.fast) {
+      enemy = new FastEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player);
+    } else {
+      enemy = new RegularEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player);
     }
     
     this.enemyGroup.add(enemy);
