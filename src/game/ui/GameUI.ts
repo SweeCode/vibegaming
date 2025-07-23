@@ -113,18 +113,23 @@ export class GameUI {
 
   showLeaderboard(scores: (number | {score: number, time: number})[]) {
     const leaderboardTitle = 'LEADERBOARD';
+    console.log('GameUI Leaderboard data:', scores); // Debug log
     
     let leaderboardContent = '';
     if (scores.length === 0) {
       leaderboardContent = 'No scores yet!\nPlay a game to set your first score.';
     } else {
       leaderboardContent = scores.map((entry, index) => {
+        console.log('GameUI Processing entry:', entry, 'Type:', typeof entry); // Debug log
         // Handle both old format (just numbers) and new format (objects with score and time)
         if (typeof entry === 'number') {
           return `${index + 1}. ${entry.toLocaleString()}`;
-        } else {
+        } else if (entry && typeof entry === 'object' && 'score' in entry && 'time' in entry) {
           const formattedTime = this.formatTime(entry.time);
           return `${index + 1}. ${entry.score.toLocaleString()} (${formattedTime})`;
+        } else {
+          // Fallback for corrupted data
+          return `${index + 1}. Invalid entry`;
         }
       }).join('\n');
     }

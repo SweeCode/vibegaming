@@ -137,6 +137,7 @@ export class MainScene extends Phaser.Scene {
   private setupKeyboardInput() {
     // ESC key to return to menu
     this.input.keyboard?.on('keydown-ESC', () => {
+      console.log('ESC pressed, going to menu'); // Debug log
       this.scene.start('StartMenuScene');
     });
   }

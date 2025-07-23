@@ -14,7 +14,13 @@ export class StartMenuScene extends Phaser.Scene {
     super({ key: 'StartMenuScene' });
   }
 
+  init() {
+    // Reset any state when the scene starts
+    this.showingLeaderboard = false;
+  }
+
   create() {
+    console.log('StartMenuScene created'); // Debug log
     const centerX = this.scale.width / 2;
     const centerY = this.scale.height / 2;
 
@@ -60,7 +66,10 @@ export class StartMenuScene extends Phaser.Scene {
       padding: { x: 20, y: 10 }
     }).setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', this.showLeaderboard, this)
+      .on('pointerdown', () => {
+        console.log('Leaderboard button clicked'); // Debug log
+        this.showLeaderboard();
+      }, this)
       .on('pointerover', () => this.leaderboardButton.setStyle({ backgroundColor: '#006666' }))
       .on('pointerout', () => this.leaderboardButton.setStyle({ backgroundColor: '#004444' }));
 
@@ -128,20 +137,25 @@ export class StartMenuScene extends Phaser.Scene {
 
     // Get scores from localStorage
     const scores = JSON.parse(localStorage.getItem('leaderboard') || '[]');
+    console.log('Leaderboard data:', scores); // Debug log
     
     let leaderboardText = 'LEADERBOARD\n\n';
     if (scores.length === 0) {
       leaderboardText += 'No scores yet!\nPlay a game to set your first score.';
     } else {
       scores.slice(0, 10).forEach((entry: number | {score: number, time: number}, index: number) => {
+        console.log('Processing entry:', entry, 'Type:', typeof entry); // Debug log
         // Handle both old format (just numbers) and new format (objects with score and time)
         if (typeof entry === 'number') {
           leaderboardText += `${index + 1}. ${entry.toLocaleString()}\n`;
-        } else {
+        } else if (entry && typeof entry === 'object' && 'score' in entry && 'time' in entry) {
           const minutes = Math.floor(entry.time / 60);
           const seconds = entry.time % 60;
           const formattedTime = `${minutes}:${seconds.toString().padStart(2, '0')}`;
           leaderboardText += `${index + 1}. ${entry.score.toLocaleString()} (${formattedTime})\n`;
+        } else {
+          // Fallback for corrupted data
+          leaderboardText += `${index + 1}. Invalid entry\n`;
         }
       });
     }
@@ -168,6 +182,7 @@ export class StartMenuScene extends Phaser.Scene {
   }
 
   private hideLeaderboard() {
+    console.log('hideLeaderboard called, currently showing:', this.showingLeaderboard); // Debug log
     if (!this.showingLeaderboard) return;
 
     this.showingLeaderboard = false;
