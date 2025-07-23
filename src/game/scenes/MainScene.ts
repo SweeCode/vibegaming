@@ -33,6 +33,7 @@ export class MainScene extends Phaser.Scene {
     this.setupCollisions();
     this.setupSpawnTimer();
     this.setupMouseInput();
+    this.setupKeyboardInput();
   }
 
   update() {
@@ -111,6 +112,13 @@ export class MainScene extends Phaser.Scene {
 
   private setupMouseInput() {
     this.input.on('pointerdown', this.handleShoot, this);
+  }
+
+  private setupKeyboardInput() {
+    // ESC key to return to menu
+    this.input.keyboard?.on('keydown-ESC', () => {
+      this.scene.start('StartMenuScene');
+    });
   }
 
   private handleBulletEnemyCollision(bullet: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile, enemy: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile) {

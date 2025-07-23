@@ -26,6 +26,12 @@ export class GameUI {
       color: '#fff' 
     });
     
+    // ESC instruction
+    this.scene.add.text(16, this.scene.scale.height - 40, 'Press ESC to return to menu', {
+      fontSize: '18px',
+      color: '#aaaaaa'
+    });
+    
     this.healthBar = this.scene.add.graphics();
     this.updateHealthBar(1);
   }
