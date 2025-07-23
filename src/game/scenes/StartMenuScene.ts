@@ -133,8 +133,16 @@ export class StartMenuScene extends Phaser.Scene {
     if (scores.length === 0) {
       leaderboardText += 'No scores yet!\nPlay a game to set your first score.';
     } else {
-      scores.slice(0, 10).forEach((score: number, index: number) => {
-        leaderboardText += `${index + 1}. ${score.toLocaleString()}\n`;
+      scores.slice(0, 10).forEach((entry: number | {score: number, time: number}, index: number) => {
+        // Handle both old format (just numbers) and new format (objects with score and time)
+        if (typeof entry === 'number') {
+          leaderboardText += `${index + 1}. ${entry.toLocaleString()}\n`;
+        } else {
+          const minutes = Math.floor(entry.time / 60);
+          const seconds = entry.time % 60;
+          const formattedTime = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+          leaderboardText += `${index + 1}. ${entry.score.toLocaleString()} (${formattedTime})\n`;
+        }
       });
     }
 

@@ -18,6 +18,7 @@ export class MainScene extends Phaser.Scene {
   private ammo = GAME_SETTINGS.weapons.bullet.maxAmmo;
   private isReloading = false;
   private gameOver = false;
+  private gameStartTime: number = 0;
   private spawnTimer!: Phaser.Time.TimerEvent;
 
   constructor() {
@@ -29,6 +30,7 @@ export class MainScene extends Phaser.Scene {
   }
 
   create() {
+    this.gameStartTime = Date.now(); // Start the timer
     this.createPlayer();
     this.createInputs();
     this.createBullets();
@@ -46,8 +48,10 @@ export class MainScene extends Phaser.Scene {
     if (this.gameOver) return;
 
     this.updateBullets();
+    this.updateEnemies(); // Add enemy cleanup
     this.player.update();
     this.reloadingBar.update();
+    this.updateTimer(); // Update timer display
   }
 
   private createTextures() {
@@ -177,9 +181,16 @@ export class MainScene extends Phaser.Scene {
   }
 
   private saveScore(score: number) {
+    const gameTime = this.getGameTime();
     const scores = JSON.parse(localStorage.getItem('leaderboard') || '[]');
-    scores.push(score);
-    scores.sort((a: number, b: number) => b - a);
+    
+    // Store both score and time
+    const scoreEntry = { score, time: gameTime };
+    scores.push(scoreEntry);
+    
+    // Sort by score (highest first)
+    scores.sort((a: {score: number, time: number}, b: {score: number, time: number}) => b.score - a.score);
+    
     localStorage.setItem('leaderboard', JSON.stringify(scores.slice(0, 10)));
     this.gameUI.showLeaderboard(scores.slice(0, 10));
   }
@@ -224,6 +235,31 @@ export class MainScene extends Phaser.Scene {
         (bullet as Phaser.GameObjects.Sprite).setActive(false).setVisible(false);
       }
     }
+  }
+
+  private updateEnemies() {
+    // Clean up enemies that have gone off-screen
+    const margin = 100; // Give some margin before cleanup
+    for (const enemy of this.enemies.getMatching('active', true)) {
+      const enemySprite = enemy as Phaser.GameObjects.Sprite;
+      if (enemySprite.x < -margin || 
+          enemySprite.x > this.scale.width + margin || 
+          enemySprite.y < -margin || 
+          enemySprite.y > this.scale.height + margin) {
+        enemySprite.destroy();
+      }
+    }
+  }
+
+  private updateTimer() {
+    if (this.gameStartTime > 0) {
+      const currentTime = Math.floor((Date.now() - this.gameStartTime) / 1000);
+      this.gameUI.updateTimer(currentTime);
+    }
+  }
+
+  private getGameTime(): number {
+    return Math.floor((Date.now() - this.gameStartTime) / 1000);
   }
 
   private spawnEnemyWithDifficulty() {
@@ -307,6 +343,7 @@ export class MainScene extends Phaser.Scene {
     this.score = 0;
     this.ammo = GAME_SETTINGS.weapons.bullet.maxAmmo;
     this.isReloading = false;
+    this.gameStartTime = Date.now(); // Reset timer
     
     this.player.setPosition(this.scale.width / 2, this.scale.height / 2);
     this.player.reset();
