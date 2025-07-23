@@ -17,7 +17,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.health = GAME_SETTINGS.player.maxHealth;
     this.maxHealth = GAME_SETTINGS.player.maxHealth;
     
-    this.keys = scene.input.keyboard.addKeys('W,A,S,D') as { [key: string]: Phaser.Input.Keyboard.Key };
+    this.keys = scene.input.keyboard?.addKeys('W,A,S,D') as { [key: string]: Phaser.Input.Keyboard.Key } || {};
   }
 
   update() {
@@ -40,15 +40,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     let velocityX = 0;
     let velocityY = 0;
 
-    if (this.keys.W.isDown) {
+    if (this.keys.W?.isDown) {
       velocityY = -1;
-    } else if (this.keys.S.isDown) {
+    } else if (this.keys.S?.isDown) {
       velocityY = 1;
     }
 
-    if (this.keys.A.isDown) {
+    if (this.keys.A?.isDown) {
       velocityX = -1;
-    } else if (this.keys.D.isDown) {
+    } else if (this.keys.D?.isDown) {
       velocityX = 1;
     }
 

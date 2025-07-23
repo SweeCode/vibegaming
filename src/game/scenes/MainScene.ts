@@ -107,18 +107,20 @@ export class MainScene extends Phaser.Scene {
     this.input.on('pointerdown', this.handleShoot, this);
   }
 
-  private handleBulletEnemyCollision(bullet: any, enemy: any) {
-    bullet.setActive(false).setVisible(false);
+  private handleBulletEnemyCollision(bullet: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile, enemy: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile) {
+    const bulletObj = bullet as Phaser.GameObjects.Sprite;
+    bulletObj.setActive(false).setVisible(false);
     
     const enemyObj = enemy as Enemy;
     this.score += enemyObj.getScoreValue();
     
-    enemy.destroy();
+    enemyObj.destroy();
     this.gameUI.updateScore(this.score);
   }
 
-  private handlePlayerEnemyCollision(player: any, enemy: any) {
-    enemy.destroy();
+  private handlePlayerEnemyCollision(player: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile, enemy: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile) {
+    const enemyObj = enemy as Enemy;
+    enemyObj.destroy();
     
     const isDead = this.player.takeDamage(GAME_SETTINGS.player.damagePerHit);
     this.gameUI.updateHealthBar(this.player.getHealthPercentage());
