@@ -14,6 +14,7 @@ export class MainScene extends Phaser.Scene {
   private ammo = GAME_SETTINGS.weapons.bullet.maxAmmo;
   private isReloading = false;
   private gameOver = false;
+  private spawnTimer!: Phaser.Time.TimerEvent;
 
   constructor() {
     super({ key: 'MainScene' });
@@ -61,10 +62,15 @@ export class MainScene extends Phaser.Scene {
     fastEnemyGraphics.fillRect(0, 0, 24, 24);
     fastEnemyGraphics.generateTexture('enemy_fast', 24, 24);
     fastEnemyGraphics.destroy();
+
+    const bigEnemyGraphics = this.make.graphics({ fillStyle: { color: 0x800080 } }, false);
+    bigEnemyGraphics.fillRect(0, 0, 48, 48);
+    bigEnemyGraphics.generateTexture('enemy_big', 48, 48);
+    bigEnemyGraphics.destroy();
   }
 
   private createPlayer() {
-    this.player = new Player(this, 400, 300);
+    this.player = new Player(this, this.scale.width / 2, this.scale.height / 2);
   }
 
   private createInputs() {
@@ -95,7 +101,7 @@ export class MainScene extends Phaser.Scene {
   }
 
   private setupSpawnTimer() {
-    this.time.addEvent({
+    this.spawnTimer = this.time.addEvent({
       delay: GAME_SETTINGS.enemies.regular.spawnDelay,
       callback: () => this.enemySpawner.spawn(),
       callbackScope: this,
@@ -109,13 +115,19 @@ export class MainScene extends Phaser.Scene {
 
   private handleBulletEnemyCollision(bullet: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile, enemy: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile) {
     const bulletObj = bullet as Phaser.GameObjects.Sprite;
+    const enemyObj = enemy as Enemy;
+
+    // Don't process if bullet is already inactive or enemy is already destroyed
+    if (!bulletObj.active || !enemyObj.active) return;
+
     bulletObj.setActive(false).setVisible(false);
     
-    const enemyObj = enemy as Enemy;
-    this.score += enemyObj.getScoreValue();
-    
-    enemyObj.destroy();
-    this.gameUI.updateScore(this.score);
+    const isDead = enemyObj.takeDamage(1);
+    if (isDead) {
+      this.score += enemyObj.getScoreValue();
+      enemyObj.destroy();
+      this.gameUI.updateScore(this.score);
+    }
   }
 
   private handlePlayerEnemyCollision(player: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile, enemy: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile) {
@@ -132,9 +144,19 @@ export class MainScene extends Phaser.Scene {
 
   private handleGameOver() {
     this.physics.pause();
+    this.spawnTimer.paused = true;
     this.player.setTint(0xff0000);
     this.gameOver = true;
     this.gameUI.showGameOver();
+    this.saveScore(this.score);
+  }
+
+  private saveScore(score: number) {
+    const scores = JSON.parse(localStorage.getItem('leaderboard') || '[]');
+    scores.push(score);
+    scores.sort((a: number, b: number) => b - a);
+    localStorage.setItem('leaderboard', JSON.stringify(scores.slice(0, 10)));
+    this.gameUI.showLeaderboard(scores.slice(0, 10));
   }
 
   private handleShoot(pointer: Phaser.Input.Pointer) {
@@ -171,7 +193,7 @@ export class MainScene extends Phaser.Scene {
 
   private updateBullets() {
     for (const bullet of this.bullets.getMatching('active', true)) {
-      if (bullet.x < 0 || bullet.x > 800 || bullet.y < 0 || bullet.y > 600) {
+      if (bullet.x < 0 || bullet.x > this.scale.width || bullet.y < 0 || bullet.y > this.scale.height) {
         (bullet as Phaser.GameObjects.Sprite).setActive(false).setVisible(false);
       }
     }
@@ -183,12 +205,15 @@ export class MainScene extends Phaser.Scene {
     this.ammo = GAME_SETTINGS.weapons.bullet.maxAmmo;
     this.isReloading = false;
     
+    this.player.setPosition(this.scale.width / 2, this.scale.height / 2);
     this.player.reset();
     this.gameUI.reset();
+    this.gameUI.hideLeaderboard();
     
     this.enemies.clear(true, true);
     this.bullets.clear(true, true);
     
     this.physics.resume();
+    this.spawnTimer.paused = false;
   }
 }

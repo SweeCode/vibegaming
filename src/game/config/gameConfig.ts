@@ -1,12 +1,16 @@
 export const GAME_CONFIG = {
-  width: 800,
-  height: 600,
+  width: window.innerWidth,
+  height: window.innerHeight,
   physics: {
     default: 'arcade' as const,
     arcade: {
       gravity: { x: 0, y: 0 },
       debug: false
     }
+  },
+  scale: {
+    mode: Phaser.Scale.RESIZE,
+    autoCenter: Phaser.Scale.CENTER_BOTH
   }
 };
 
@@ -30,9 +34,15 @@ export const GAME_SETTINGS = {
       spawnDelay: 1000
     },
     fast: {
-      speed: 200,
+      speed: 400,
       scoreValue: 20,
       spawnChance: 0.1
+    },
+    big: {
+      speed: 50,
+      scoreValue: 50,
+      spawnChance: 0.2,
+      health: 3
     }
   }
 };

@@ -2,7 +2,7 @@ import GameLoader from '@/components/GameLoader';
 
 export default function Home() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
+    <main style={{ margin: 0, padding: 0, width: '100vw', height: '100vh', overflow: 'hidden' }}>
       <GameLoader />
     </main>
   );

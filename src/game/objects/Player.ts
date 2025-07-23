@@ -72,6 +72,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   reset() {
     this.health = this.maxHealth;
     this.clearTint();
-    this.setPosition(400, 300);
+    // Position will be set by the scene
   }
 }

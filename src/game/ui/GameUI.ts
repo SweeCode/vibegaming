@@ -8,6 +8,7 @@ export class GameUI {
   private healthBar!: Phaser.GameObjects.Graphics;
   private gameOverText?: Phaser.GameObjects.Text;
   private restartText?: Phaser.GameObjects.Text;
+  private leaderboardText?: Phaser.GameObjects.Text;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -68,6 +69,25 @@ export class GameUI {
       repeat: -1,
       yoyo: true
     });
+  }
+
+  showLeaderboard(scores: number[]) {
+    const leaderboardTitle = 'Leaderboard';
+    const leaderboardContent = scores.map((score, index) => `${index + 1}. ${score}`).join('\n');
+    const leaderboardFullText = `${leaderboardTitle}\n${leaderboardContent}`;
+
+    this.leaderboardText = this.scene.add.text(400, 400, leaderboardFullText, {
+      fontSize: '24px',
+      color: '#fff',
+      align: 'center'
+    }).setOrigin(0.5);
+  }
+
+  hideLeaderboard() {
+    if (this.leaderboardText) {
+      this.leaderboardText.destroy();
+      this.leaderboardText = undefined;
+    }
   }
 
   reset() {

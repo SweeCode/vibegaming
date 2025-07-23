@@ -20,6 +20,7 @@ const Game = () => {
       height: GAME_CONFIG.height,
       parent: gameRef.current || undefined,
       physics: GAME_CONFIG.physics,
+      scale: GAME_CONFIG.scale,
       scene: [MainScene]
     };
 
@@ -31,7 +32,18 @@ const Game = () => {
     };
   }, []);
 
-  return <div ref={gameRef} />;
+  return (
+    <div 
+      ref={gameRef} 
+      style={{ 
+        width: '100vw', 
+        height: '100vh', 
+        margin: 0, 
+        padding: 0,
+        overflow: 'hidden'
+      }} 
+    />
+  );
 };
 
 export default Game;
