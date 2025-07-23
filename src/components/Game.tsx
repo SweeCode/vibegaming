@@ -43,6 +43,8 @@ const Game = () => {
     let ammo = 30;
     let ammoText: Phaser.GameObjects.Text;
     let isReloading = false;
+    let health = 100;
+    let healthBar: Phaser.GameObjects.Graphics;
     let gameOver = false;
 
     function preload(this: Phaser.Scene) {
@@ -86,6 +88,9 @@ const Game = () => {
       scoreText = this.add.text(16, 16, 'Score: 0', { fontSize: '32px', color: '#fff' });
       ammoText = this.add.text(16, 50, 'Ammo: 30', { fontSize: '32px', color: '#fff' });
 
+      healthBar = this.add.graphics();
+      updateHealthBar();
+
       this.physics.add.collider(bullets, enemies, (bullet, enemy) => {
         bullet.destroy();
         enemy.destroy();
@@ -94,10 +99,15 @@ const Game = () => {
       });
 
       this.physics.add.collider(player, enemies, (player, enemy) => {
-        this.physics.pause();
-        player.setTint(0xff0000);
-        gameOver = true;
-        this.add.text(400, 300, 'Game Over', { fontSize: '64px', color: '#ff0000' }).setOrigin(0.5);
+        enemy.destroy();
+        health -= 25;
+        updateHealthBar();
+        if (health <= 0) {
+          this.physics.pause();
+          player.setTint(0xff0000);
+          gameOver = true;
+          this.add.text(400, 300, 'Game Over', { fontSize: '64px', color: '#ff0000' }).setOrigin(0.5);
+        }
       });
 
       this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
@@ -177,6 +187,12 @@ const Game = () => {
       if(enemy) {
         this.physics.moveToObject(enemy, player, 100);
       }
+    }
+
+    function updateHealthBar() {
+      healthBar.clear();
+      healthBar.fillStyle(0x00ff00, 1);
+      healthBar.fillRect(16, 90, 200 * (health / 100), 20);
     }
 
 
