@@ -4,14 +4,16 @@ export class StartMenuScene extends Phaser.Scene {
   private startButton!: Phaser.GameObjects.Text;
   private optionsButton!: Phaser.GameObjects.Text;
   private leaderboardButton!: Phaser.GameObjects.Text;
-  private gameModesButton!: Phaser.GameObjects.Text;
+  private gameModesButton?: Phaser.GameObjects.Text;
   private titleText!: Phaser.GameObjects.Text;
   private leaderboardDisplay?: Phaser.GameObjects.Text;
   private backButton?: Phaser.GameObjects.Text;
   private classicButton?: Phaser.GameObjects.Text;
   private waveButton?: Phaser.GameObjects.Text;
+  private modesBackButton?: Phaser.GameObjects.Text;
   private showingLeaderboard = false;
-  private currentLeaderboardMode: 'classic' | 'wave' = 'classic';
+  private showingModes = false;
+  private currentLeaderboardMode: 'endless' | 'wave' = 'endless';
 
   constructor() {
     super({ key: 'StartMenuScene' });
@@ -20,7 +22,7 @@ export class StartMenuScene extends Phaser.Scene {
   init() {
     // Reset any state when the scene starts
     this.showingLeaderboard = false;
-    this.currentLeaderboardMode = 'classic';
+    this.currentLeaderboardMode = 'endless';
   }
 
   create() {
@@ -38,15 +40,15 @@ export class StartMenuScene extends Phaser.Scene {
       fontStyle: 'bold'
     }).setOrigin(0.5);
 
-    // Start Game Button (Classic Mode)
-    this.startButton = this.add.text(centerX, centerY - 80, 'CLASSIC MODE', {
+    // Primary Game Modes Button
+    this.startButton = this.add.text(centerX, centerY - 80, 'GAME MODES', {
       fontSize: '28px',
       color: '#00ff00',
       backgroundColor: '#004400',
       padding: { x: 20, y: 10 }
     }).setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', this.startGame, this)
+      .on('pointerdown', this.showGameModes, this)
       .on('pointerover', () => this.startButton.setStyle({ backgroundColor: '#006600' }))
       .on('pointerout', () => this.startButton.setStyle({ backgroundColor: '#004400' }));
 
@@ -77,17 +79,7 @@ export class StartMenuScene extends Phaser.Scene {
       .on('pointerover', () => this.leaderboardButton.setStyle({ backgroundColor: '#006666' }))
       .on('pointerout', () => this.leaderboardButton.setStyle({ backgroundColor: '#004444' }));
 
-    // Wave Mode Button
-    this.gameModesButton = this.add.text(centerX, centerY + 100, 'WAVE MODE', {
-      fontSize: '28px',
-      color: '#ff00ff',
-      backgroundColor: '#440044',
-      padding: { x: 20, y: 10 }
-    }).setOrigin(0.5)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', this.startWaveMode, this)
-      .on('pointerover', () => this.gameModesButton.setStyle({ backgroundColor: '#660066' }))
-      .on('pointerout', () => this.gameModesButton.setStyle({ backgroundColor: '#440044' }));
+
 
     // Instructions
     this.add.text(this.scale.width / 2, this.scale.height - 60, 'Ctrl+Shift+R to reset leaderboard', {
@@ -188,7 +180,7 @@ export class StartMenuScene extends Phaser.Scene {
     this.startButton.setVisible(false);
     this.optionsButton.setVisible(false);
     this.leaderboardButton.setVisible(false);
-    this.gameModesButton.setVisible(false);
+    this.gameModesButton?.setVisible(false);
 
     // Show leaderboard mode selection
     this.showLeaderboardModeSelection();
@@ -209,14 +201,14 @@ export class StartMenuScene extends Phaser.Scene {
     this.classicButton = this.add.text(centerX - 100, centerY - 50, 'CLASSIC', {
       fontSize: '24px',
       color: '#00ff00',
-      backgroundColor: this.currentLeaderboardMode === 'classic' ? '#006600' : '#004400',
+      backgroundColor: this.currentLeaderboardMode === 'endless' ? '#006600' : '#004400',
       padding: { x: 20, y: 10 }
     }).setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.showSpecificLeaderboard('classic'), this)
+      .on('pointerdown', () => this.showSpecificLeaderboard('endless'), this)
       .on('pointerover', () => this.classicButton?.setStyle({ backgroundColor: '#006600' }))
       .on('pointerout', () => this.classicButton?.setStyle({ 
-        backgroundColor: this.currentLeaderboardMode === 'classic' ? '#006600' : '#004400' 
+        backgroundColor: this.currentLeaderboardMode === 'endless' ? '#006600' : '#004400' 
       }));
 
     // Wave mode button
@@ -237,13 +229,13 @@ export class StartMenuScene extends Phaser.Scene {
     this.showSpecificLeaderboard(this.currentLeaderboardMode);
   }
 
-  private showSpecificLeaderboard(mode: 'classic' | 'wave') {
+  private showSpecificLeaderboard(mode: 'endless' | 'wave') {
     this.currentLeaderboardMode = mode;
 
     // Update button styles
     if (this.classicButton) {
       this.classicButton.setStyle({ 
-        backgroundColor: mode === 'classic' ? '#006600' : '#004400' 
+        backgroundColor: mode === 'endless' ? '#006600' : '#004400' 
       });
     }
     if (this.waveButton) {
@@ -324,7 +316,7 @@ export class StartMenuScene extends Phaser.Scene {
     this.startButton.setVisible(true);
     this.optionsButton.setVisible(true);
     this.leaderboardButton.setVisible(true);
-    this.gameModesButton.setVisible(true);
+    this.gameModesButton?.setVisible(true);
 
     // Hide leaderboard display
     if (this.leaderboardDisplay) {
@@ -375,14 +367,64 @@ export class StartMenuScene extends Phaser.Scene {
   }
 
   private showGameModes() {
-    // Placeholder for future game modes implementation
-    this.add.text(this.scale.width / 2, this.scale.height - 100, 'Game Modes coming soon!', {
-      fontSize: '24px',
-      color: '#ff00ff'
-    }).setOrigin(0.5);
+    if (this.showingModes) return;
+    this.showingModes = true;
 
-    this.time.delayedCall(2000, () => {
-      this.scene.restart();
-    });
+    this.startButton.setVisible(false);
+    this.optionsButton.setVisible(false);
+    this.leaderboardButton.setVisible(false);
+    this.gameModesButton?.setVisible(false);
+
+    const centerX = this.scale.width / 2;
+    const centerY = this.scale.height / 2;
+
+
+
+    this.classicButton = this.add.text(centerX - 100, centerY - 20, 'ENDLESS', {
+      fontSize: '28px',
+      color: '#00ff00',
+      backgroundColor: '#004400',
+      padding: { x: 20, y: 10 }
+    }).setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', this.startGame, this)
+      .on('pointerover', () => this.classicButton?.setStyle({ backgroundColor: '#006600' }))
+      .on('pointerout', () => this.classicButton?.setStyle({ backgroundColor: '#004400' }));
+
+    this.waveButton = this.add.text(centerX + 100, centerY - 20, 'WAVE', {
+      fontSize: '28px',
+      color: '#ff00ff',
+      backgroundColor: '#440044',
+      padding: { x: 20, y: 10 }
+    }).setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', this.startWaveMode, this)
+      .on('pointerover', () => this.waveButton?.setStyle({ backgroundColor: '#660066' }))
+      .on('pointerout', () => this.waveButton?.setStyle({ backgroundColor: '#440044' }));
+
+    this.modesBackButton = this.add.text(centerX, centerY + 120, 'BACK', {
+      fontSize: '24px',
+      color: '#ffffff',
+      backgroundColor: '#660000',
+      padding: { x: 20, y: 10 }
+    }).setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.hideGameModes(), this)
+      .on('pointerover', () => this.modesBackButton?.setStyle({ backgroundColor: '#880000' }))
+      .on('pointerout', () => this.modesBackButton?.setStyle({ backgroundColor: '#660000' }));
+  }
+
+  private hideGameModes() {
+    if (!this.showingModes) return;
+    this.showingModes = false;
+
+    this.startButton.setVisible(true);
+    this.optionsButton.setVisible(true);
+    this.leaderboardButton.setVisible(true);
+    this.gameModesButton?.setVisible(true);
+
+    if (this.classicButton) { this.classicButton.destroy(); this.classicButton = undefined; }
+    if (this.waveButton) { this.waveButton.destroy(); this.waveButton = undefined; }
+    if (this.modesBackButton) { this.modesBackButton.destroy(); this.modesBackButton = undefined; }
   }
 }
