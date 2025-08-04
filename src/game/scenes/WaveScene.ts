@@ -346,8 +346,11 @@ export class WaveScene extends Phaser.Scene {
     if (this.breakTimer) this.breakTimer.paused = true;
     this.player.setTint(0xff0000);
     this.gameOver = true;
-    this.gameUI.showGameOver();
-    this.promptScoreEntry();
+    this.gameUI.showGameOver(
+      () => this.resetGame(),
+      () => this.scene.start('StartMenuScene'),
+      () => this.promptScoreEntry()
+    );
   }
 
   private promptScoreEntry() {

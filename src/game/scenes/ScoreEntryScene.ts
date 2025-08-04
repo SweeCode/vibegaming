@@ -3,7 +3,7 @@ import * as Phaser from 'phaser';
 export class ScoreEntryScene extends Phaser.Scene {
   private score: number = 0;
   private gameTime: number = 0;
-  private gameMode: string = 'classic'; // 'classic' or 'wave'
+  private gameMode: string = 'endless'; // 'endless' or 'wave'
   private nameInput!: Phaser.GameObjects.Text;
   private currentName: string = '';
   private maxNameLength: number = 12;
@@ -18,7 +18,7 @@ export class ScoreEntryScene extends Phaser.Scene {
   init(data: { score: number, time: number, gameMode?: string }) {
     this.score = data.score;
     this.gameTime = data.time;
-    this.gameMode = data.gameMode || 'classic';
+    this.gameMode = data.gameMode || 'endless';
     this.currentName = '';
   }
 
@@ -30,7 +30,7 @@ export class ScoreEntryScene extends Phaser.Scene {
     this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0x000033).setOrigin(0, 0);
 
     // Title with game mode
-    const modeText = this.gameMode === 'wave' ? 'WAVE MODE' : 'CLASSIC MODE';
+    const modeText = this.gameMode === 'wave' ? 'WAVE MODE' : 'ENDLESS MODE';
     this.add.text(centerX, centerY - 180, 'NEW HIGH SCORE!', {
       fontSize: '48px',
       color: '#ffff00',
@@ -163,7 +163,7 @@ export class ScoreEntryScene extends Phaser.Scene {
     });
     
     // Keep only top 10 for the specific game mode
-    localStorage.setItem(leaderboardKey, JSON.stringify(scores.slice(0, 10)));
+    localStorage.setItem(leaderboardKey, JSON.stringify(scores.slice(0, 20)));
     
     // Go to start menu
     this.scene.start('StartMenuScene');

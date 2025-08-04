@@ -12,6 +12,9 @@ export class GameUI {
   private gameOverText?: Phaser.GameObjects.Text;
   private restartText?: Phaser.GameObjects.Text;
   private leaderboardText?: Phaser.GameObjects.Text;
+  private retryButton?: Phaser.GameObjects.Text;
+  private menuButton?: Phaser.GameObjects.Text;
+  private saveScoreButton?: Phaser.GameObjects.Text;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -119,25 +122,38 @@ export class GameUI {
     this.healthText.setPosition(xPosition + barWidth + 10, yPosition + (barHeight / 2) - 8); // Center vertically next to bar
   }
 
-  showGameOver() {
-    this.gameOverText = this.scene.add.text(400, 300, 'Game Over', { 
+  showGameOver(onRetry?: () => void, onMenu?: () => void, onSave?: () => void) {
+    this.gameOverText = this.scene.add.text(400, 260, 'Game Over', { 
       fontSize: '64px', 
       color: '#ff0000' 
     }).setOrigin(0.5);
-    
-    this.restartText = this.scene.add.text(400, 350, 'Press to restart', { 
-      fontSize: '32px', 
-      color: '#fff' 
-    }).setOrigin(0.5);
 
-    this.scene.tweens.add({
-      targets: this.restartText,
-      alpha: { from: 0, to: 1 },
-      ease: 'Linear',
-      duration: 1000,
-      repeat: -1,
-      yoyo: true
-    });
+    this.retryButton = this.scene.add.text(400, 330, 'RETRY', {
+      fontSize: '28px',
+      color: '#ffffff',
+      backgroundColor: '#006600',
+      padding: { x: 20, y: 10 }
+    }).setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => onRetry && onRetry());
+
+    this.menuButton = this.scene.add.text(400, 380, 'MAIN MENU', {
+      fontSize: '28px',
+      color: '#ffffff',
+      backgroundColor: '#444400',
+      padding: { x: 20, y: 10 }
+    }).setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => onMenu && onMenu());
+
+    this.saveScoreButton = this.scene.add.text(400, 430, 'SAVE SCORE', {
+      fontSize: '28px',
+      color: '#ffffff',
+      backgroundColor: '#004466',
+      padding: { x: 20, y: 10 }
+    }).setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => onSave && onSave());
   }
 
   showLeaderboard(scores: (number | {name?: string, score: number, time: number})[]) {
@@ -195,6 +211,10 @@ export class GameUI {
       this.restartText.destroy();
       this.restartText = undefined;
     }
+
+    if (this.retryButton) { this.retryButton.destroy(); this.retryButton = undefined; }
+    if (this.menuButton) { this.menuButton.destroy(); this.menuButton = undefined; }
+    if (this.saveScoreButton) { this.saveScoreButton.destroy(); this.saveScoreButton = undefined; }
     
     this.updateScore(0);
     this.updateAmmo(GAME_SETTINGS.weapons.bullet.maxAmmo);

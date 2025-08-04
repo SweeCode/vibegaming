@@ -202,8 +202,11 @@ export class MainScene extends Phaser.Scene {
     this.spawnTimer.paused = true;
     this.player.setTint(0xff0000);
     this.gameOver = true;
-    this.gameUI.showGameOver();
-    this.promptScoreEntry();
+    this.gameUI.showGameOver(
+      () => this.resetGame(),
+      () => this.scene.start('StartMenuScene'),
+      () => this.promptScoreEntry()
+    );
   }
 
   private promptScoreEntry() {

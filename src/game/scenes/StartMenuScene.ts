@@ -258,7 +258,7 @@ export class StartMenuScene extends Phaser.Scene {
     if (scores.length === 0) {
       leaderboardText += 'No scores yet!\nPlay a game to set your first score.';
     } else {
-      scores.slice(0, 10).forEach((entry: number | {name?: string, score: number, time: number}, index: number) => {
+      scores.slice(0, 20).forEach((entry: number | {name?: string, score: number, time: number}, index: number) => {
         if (typeof entry === 'number') {
           // Old format - just score
           leaderboardText += `${index + 1}. ${entry.toLocaleString()}\n`;
