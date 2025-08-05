@@ -123,12 +123,26 @@ export class GameUI {
   }
 
   showGameOver(onRetry?: () => void, onMenu?: () => void, onSave?: () => void) {
-    this.gameOverText = this.scene.add.text(400, 260, 'Game Over', { 
+    const centerX = this.scene.scale.width / 2;
+    const centerY = this.scene.scale.height / 2;
+
+    this.gameOverText = this.scene.add.text(centerX, centerY - 100, 'Game Over', { 
       fontSize: '64px', 
       color: '#ff0000' 
     }).setOrigin(0.5);
 
-    this.retryButton = this.scene.add.text(400, 330, 'RETRY', {
+    const spacing = 40;
+
+    this.saveScoreButton = this.scene.add.text(0, 0, 'SAVE SCORE', {
+      fontSize: '28px',
+      color: '#ffffff',
+      backgroundColor: '#004466',
+      padding: { x: 20, y: 10 }
+    }).setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => onSave && onSave());
+
+    this.retryButton = this.scene.add.text(0, 0, 'RETRY', {
       fontSize: '28px',
       color: '#ffffff',
       backgroundColor: '#006600',
@@ -137,7 +151,7 @@ export class GameUI {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => onRetry && onRetry());
 
-    this.menuButton = this.scene.add.text(400, 380, 'MAIN MENU', {
+    this.menuButton = this.scene.add.text(0, 0, 'MAIN MENU', {
       fontSize: '28px',
       color: '#ffffff',
       backgroundColor: '#444400',
@@ -146,14 +160,15 @@ export class GameUI {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => onMenu && onMenu());
 
-    this.saveScoreButton = this.scene.add.text(400, 430, 'SAVE SCORE', {
-      fontSize: '28px',
-      color: '#ffffff',
-      backgroundColor: '#004466',
-      padding: { x: 20, y: 10 }
-    }).setOrigin(0.5)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => onSave && onSave());
+    const totalWidth = this.saveScoreButton.width + this.retryButton.width + this.menuButton.width + spacing * 2;
+    let startX = centerX - totalWidth / 2;
+    const y = centerY;
+
+    this.saveScoreButton.setPosition(startX + this.saveScoreButton.width / 2, y);
+    startX += this.saveScoreButton.width + spacing;
+    this.retryButton.setPosition(startX + this.retryButton.width / 2, y);
+    startX += this.retryButton.width + spacing;
+    this.menuButton.setPosition(startX + this.menuButton.width / 2, y);
   }
 
   showLeaderboard(scores: (number | {name?: string, score: number, time: number})[]) {

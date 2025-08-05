@@ -112,6 +112,81 @@ export class BigEnemy extends Enemy {
   }
 }
 
+export class ShooterEnemy extends Enemy {
+  private target: Player;
+  private fireTimer?: Phaser.Time.TimerEvent;
+
+  constructor(scene: Phaser.Scene, x: number, y: number, target: Player, speedMultiplier: number = 1) {
+    const adjustedSpeed = GAME_SETTINGS.enemies.shooter.speed * speedMultiplier;
+    super(scene, x, y, 'enemy_shooter', adjustedSpeed, GAME_SETTINGS.enemies.shooter.scoreValue, GAME_SETTINGS.enemies.shooter.health);
+    this.target = target;
+    this.setCollideWorldBounds(true);
+    this.startFiring();
+  }
+
+  private startFiring() {
+    this.fireTimer = this.scene.time.addEvent({
+      delay: GAME_SETTINGS.enemies.shooter.fireRateMs,
+      loop: true,
+      callback: () => this.fire()
+    });
+  }
+
+  private fire() {
+    const sceneWithBullets = this.scene as Phaser.Scene & { enemyBullets?: Phaser.Physics.Arcade.Group };
+    const group = sceneWithBullets.enemyBullets;
+    if (!group) return;
+    const bullet = group.get(this.x, this.y, 'enemy_bullet') as Phaser.Physics.Arcade.Image | null;
+    if (!bullet) return;
+    bullet.enableBody(true, this.x, this.y, true, true);
+    bullet.setActive(true).setVisible(true);
+    bullet.setCircle(4, 0, 0);
+    this.scene.physics.world.enable(bullet);
+    this.scene.physics.moveTo(bullet, this.target.x, this.target.y, GAME_SETTINGS.enemies.shooter.bulletSpeed);
+  }
+
+  update() {
+    const dx = this.target.x - this.x;
+    const dy = this.target.y - this.y;
+    const dist = Math.hypot(dx, dy) || 1;
+
+    const min = GAME_SETTINGS.enemies.shooter.preferredRangeMin ?? 220;
+    const max = GAME_SETTINGS.enemies.shooter.preferredRangeMax ?? 300;
+    const strafe = GAME_SETTINGS.enemies.shooter.strafeSpeed ?? 80;
+
+    let vx = 0;
+    let vy = 0;
+
+    if (dist < min) {
+      vx = (-dx / dist) * this.speed;
+      vy = (-dy / dist) * this.speed;
+    } else if (dist > max) {
+      vx = (dx / dist) * this.speed;
+      vy = (dy / dist) * this.speed;
+    } else {
+      vx = (-dy / dist) * strafe;
+      vy = (dx / dist) * strafe;
+    }
+
+    const w = this.scene.scale.width;
+    const h = this.scene.scale.height;
+    const margin = 12;
+    if (this.x <= margin && vx < 0) vx = 0;
+    if (this.x >= w - margin && vx > 0) vx = 0;
+    if (this.y <= margin && vy < 0) vy = 0;
+    if (this.y >= h - margin && vy > 0) vy = 0;
+    this.setVelocity(vx, vy);
+  }
+
+  destroy(fromScene?: boolean): void {
+    if (this.fireTimer) {
+      this.fireTimer.remove(false);
+      this.fireTimer = undefined;
+    }
+    super.destroy(fromScene);
+  }
+}
+
 export class EnemySpawner {
   private scene: Phaser.Scene;
   private enemyGroup: Phaser.Physics.Arcade.Group;
@@ -160,10 +235,16 @@ export class EnemySpawner {
     const spawnChance = Math.random();
     
     let enemy: Enemy;
-    if (spawnChance < waveSettings.enemyTypes.big) {
+    const bigCut = waveSettings.enemyTypes.big;
+    const fastCut = bigCut + waveSettings.enemyTypes.fast;
+    const shooterCut = fastCut + waveSettings.enemyTypes.shooter;
+
+    if (spawnChance < bigCut) {
       enemy = new BigEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player);
-    } else if (spawnChance < waveSettings.enemyTypes.big + waveSettings.enemyTypes.fast) {
+    } else if (spawnChance < fastCut) {
       enemy = new FastEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player);
+    } else if (spawnChance < shooterCut) {
+      enemy = new ShooterEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player);
     } else {
       enemy = new RegularEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player);
     }

@@ -10,8 +10,8 @@ import { UpgradeManager } from '../systems/UpgradeManager';
 export class MainScene extends Phaser.Scene {
   private player!: Player;
   private bullets!: Phaser.Physics.Arcade.Group;
-  private enemies!: Phaser.Physics.Arcade.Group;
-  private enemySpawner!: EnemySpawner;
+   private enemies!: Phaser.Physics.Arcade.Group;
+   private enemyBullets!: Phaser.Physics.Arcade.Group;  private enemySpawner!: EnemySpawner;
   private gameUI!: GameUI;
   private reloadingBar!: ReloadingBar;
   private difficultyManager!: DifficultyManager;
@@ -46,8 +46,8 @@ export class MainScene extends Phaser.Scene {
     this.createPlayer();
     this.createInputs();
     this.createBullets();
-    this.createEnemies();
-    this.createUI();
+     this.createEnemies();
+     this.createEnemyBullets();    this.createUI();
     this.createReloadingBar();
     this.createDifficultyManager();
     this.setupCollisions();
@@ -72,8 +72,19 @@ export class MainScene extends Phaser.Scene {
     this.updateTimer(); // Update timer display
   }
 
-  private createTextures() {
-    const playerGraphics = this.make.graphics({ fillStyle: { color: 0xffffff } }, false);
+   private createTextures() {
+     const shooterGraphics = this.make.graphics({ fillStyle: { color: 0xFFA500 } }, false);
+     shooterGraphics.fillRect(0, 0, 24, 24);
+     shooterGraphics.generateTexture('enemy_shooter', 24, 24);
+     shooterGraphics.destroy();
+
+     const enemyBulletG = this.make.graphics(undefined, false);
+     enemyBulletG.lineStyle(2, 0xFFFFFF, 1);
+     enemyBulletG.fillStyle(0xFF0000, 1);
+     enemyBulletG.fillCircle(4, 4, 3);
+     enemyBulletG.strokeCircle(4, 4, 4);
+     enemyBulletG.generateTexture('enemy_bullet', 8, 8);
+     enemyBulletG.destroy();    const playerGraphics = this.make.graphics({ fillStyle: { color: 0xffffff } }, false);
     playerGraphics.fillRect(0, 0, 32, 32);
     playerGraphics.generateTexture('player', 32, 32);
     playerGraphics.destroy();
@@ -114,8 +125,11 @@ export class MainScene extends Phaser.Scene {
     });
   }
 
-  private createEnemies() {
-    this.enemies = this.physics.add.group({
+   private createEnemyBullets() {
+     this.enemyBullets = this.physics.add.group({ defaultKey: 'enemy_bullet', maxSize: 200 });
+   }
+
+   private createEnemies() {    this.enemies = this.physics.add.group({
       runChildUpdate: true
     });
     this.enemySpawner = new EnemySpawner(this, this.enemies, this.player);
@@ -136,6 +150,7 @@ export class MainScene extends Phaser.Scene {
   private setupCollisions() {
     this.physics.add.collider(this.bullets, this.enemies, this.handleBulletEnemyCollision, undefined, this);
     this.physics.add.collider(this.player, this.enemies, this.handlePlayerEnemyCollision, undefined, this);
+    this.physics.add.overlap(this.player, this.enemyBullets, (playerObj, bulletObj) => this.handlePlayerHitByEnemyBullet(playerObj as Phaser.GameObjects.GameObject, bulletObj as Phaser.GameObjects.GameObject), undefined, this);
   }
 
   private setupSpawnTimer() {
@@ -197,6 +212,17 @@ export class MainScene extends Phaser.Scene {
     }
   }
 
+  private handlePlayerHitByEnemyBullet(player: Phaser.GameObjects.GameObject, bullet: Phaser.GameObjects.GameObject) {
+    const bulletSprite = bullet as Phaser.GameObjects.Sprite;
+    if (!bulletSprite.active) return;
+    bulletSprite.setActive(false).setVisible(false);
+
+    const damage = Math.floor(GAME_SETTINGS.player.maxHealth * GAME_SETTINGS.enemies.shooter.bulletDamagePct);
+    const isDead = this.player.takeDamage(damage);
+    this.gameUI.updateHealthBar(this.player.getHealthPercentage());
+    if (isDead) this.handleGameOver();
+  }
+
   private handleGameOver() {
     this.physics.pause();
     this.spawnTimer.paused = true;
@@ -205,7 +231,7 @@ export class MainScene extends Phaser.Scene {
     this.gameUI.showGameOver(
       () => this.resetGame(),
       () => this.scene.start('StartMenuScene'),
-      () => this.promptScoreEntry()
+      () => this.scene.start('ScoreEntryScene', { score: this.score, time: this.getGameTime(), gameMode: 'main' })
     );
   }
 
@@ -267,8 +293,7 @@ export class MainScene extends Phaser.Scene {
   private updateEnemies() {
     if (!this.enemies) return;
     
-    // Clean up enemies that have gone off-screen
-    const margin = 100; // Give some margin before cleanup
+    const margin = 100;
     for (const enemy of this.enemies.getMatching('active', true)) {
       const enemySprite = enemy as Phaser.GameObjects.Sprite;
       if (enemySprite.x < -margin || 
@@ -276,6 +301,15 @@ export class MainScene extends Phaser.Scene {
           enemySprite.y < -margin || 
           enemySprite.y > this.scale.height + margin) {
         enemySprite.destroy();
+      }
+    }
+
+    if (this.enemyBullets) {
+      for (const b of this.enemyBullets.getMatching('active', true)) {
+        const bs = b as Phaser.GameObjects.Sprite;
+        if (bs.x < -16 || bs.x > this.scale.width + 16 || bs.y < -16 || bs.y > this.scale.height + 16) {
+          bs.setActive(false).setVisible(false);
+        }
       }
     }
   }

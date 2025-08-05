@@ -43,6 +43,18 @@ export const GAME_SETTINGS = {
       scoreValue: 50,
       spawnChance: 0.2,
       health: 3
+    },
+    shooter: {
+      speed: 100,
+      scoreValue: 30,
+      spawnChance: 0.15,
+      health: 2,
+      fireRateMs: 1500,
+      bulletSpeed: 300,
+      bulletDamagePct: 0.1,
+      preferredRangeMin: 220,
+      preferredRangeMax: 300,
+      strafeSpeed: 120
     }
   }
 };

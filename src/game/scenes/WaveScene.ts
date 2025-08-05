@@ -11,6 +11,7 @@ export class WaveScene extends Phaser.Scene {
   private player!: Player;
   private bullets!: Phaser.Physics.Arcade.Group;
   private enemies!: Phaser.Physics.Arcade.Group;
+  private enemyBullets!: Phaser.Physics.Arcade.Group;
   private enemySpawner!: EnemySpawner;
   private gameUI!: GameUI;
   private reloadingBar!: ReloadingBar;
@@ -105,6 +106,19 @@ export class WaveScene extends Phaser.Scene {
     bigEnemyGraphics.fillRect(0, 0, 48, 48);
     bigEnemyGraphics.generateTexture('enemy_big', 48, 48);
     bigEnemyGraphics.destroy();
+
+    const shooterGraphics = this.make.graphics({ fillStyle: { color: 0xFFA500 } }, false);
+    shooterGraphics.fillRect(0, 0, 24, 24);
+    shooterGraphics.generateTexture('enemy_shooter', 24, 24);
+    shooterGraphics.destroy();
+
+    const enemyBulletG = this.make.graphics(undefined, false);
+    enemyBulletG.lineStyle(2, 0xFFFFFF, 1);
+    enemyBulletG.fillStyle(0xFF0000, 1);
+    enemyBulletG.fillCircle(4, 4, 3);
+    enemyBulletG.strokeCircle(4, 4, 4);
+    enemyBulletG.generateTexture('enemy_bullet', 8, 8);
+    enemyBulletG.destroy();
   }
 
   private createPlayer() {
@@ -122,6 +136,7 @@ export class WaveScene extends Phaser.Scene {
     this.enemies = this.physics.add.group({
       runChildUpdate: true
     });
+    this.enemyBullets = this.physics.add.group({ defaultKey: 'enemy_bullet', maxSize: 200 });
     this.enemySpawner = new EnemySpawner(this, this.enemies, this.player);
   }
 
@@ -140,6 +155,7 @@ export class WaveScene extends Phaser.Scene {
   private setupCollisions() {
     this.physics.add.collider(this.bullets, this.enemies, this.handleBulletEnemyCollision, undefined, this);
     this.physics.add.collider(this.player, this.enemies, this.handlePlayerEnemyCollision, undefined, this);
+    this.physics.add.overlap(this.player, this.enemyBullets, (playerObj, bulletObj) => this.handlePlayerHitByEnemyBullet(playerObj as Phaser.GameObjects.GameObject, bulletObj as Phaser.GameObjects.GameObject), undefined, this);
   }
 
   private setupMouseInput() {
@@ -340,6 +356,17 @@ export class WaveScene extends Phaser.Scene {
     }
   }
 
+  private handlePlayerHitByEnemyBullet(player: Phaser.GameObjects.GameObject, bullet: Phaser.GameObjects.GameObject) {
+    const bulletSprite = bullet as Phaser.GameObjects.Sprite;
+    if (!bulletSprite.active) return;
+    bulletSprite.setActive(false).setVisible(false);
+
+    const damage = Math.floor(GAME_SETTINGS.player.maxHealth * GAME_SETTINGS.enemies.shooter.bulletDamagePct);
+    const isDead = this.player.takeDamage(damage);
+    this.gameUI.updateHealthBar(this.player.getHealthPercentage());
+    if (isDead) this.handleGameOver();
+  }
+
   private handleGameOver() {
     this.physics.pause();
     if (this.spawnTimer) this.spawnTimer.paused = true;
@@ -349,7 +376,7 @@ export class WaveScene extends Phaser.Scene {
     this.gameUI.showGameOver(
       () => this.resetGame(),
       () => this.scene.start('StartMenuScene'),
-      () => this.promptScoreEntry()
+      () => this.scene.start('ScoreEntryScene', { score: this.score, time: this.getGameTime(), gameMode: 'wave' })
     );
   }
 
@@ -420,14 +447,23 @@ export class WaveScene extends Phaser.Scene {
           enemySprite.x > this.scale.width + margin || 
           enemySprite.y < -margin || 
           enemySprite.y > this.scale.height + margin) {
-        // Award score for off-screen enemies (they "escaped" but still count)
         this.score += enemySprite.getScoreValue();
         this.gameUI.updateScore(this.score);
-        
-        // Count off-screen enemies as killed for wave progression
         this.waveManager.onEnemyKilled();
         console.log(`Enemy went off-screen! Wave progress: ${this.waveManager.getWaveProgress().killed}/${this.waveManager.getWaveProgress().total}`);
         enemySprite.destroy();
+      }
+    }
+
+    if (this['enemyBullets']) {
+      const group = (this as unknown as Phaser.Scene & { enemyBullets?: Phaser.Physics.Arcade.Group }).enemyBullets;
+      if (group) {
+        for (const b of group.getMatching('active', true)) {
+          const bs = b as Phaser.GameObjects.Sprite;
+          if (bs.x < -16 || bs.x > this.scale.width + 16 || bs.y < -16 || bs.y > this.scale.height + 16) {
+            bs.setActive(false).setVisible(false);
+          }
+        }
       }
     }
   }

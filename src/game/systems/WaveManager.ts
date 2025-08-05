@@ -7,6 +7,7 @@ export interface WaveSettings {
     normal: number;
     fast: number;
     big: number;
+    shooter: number;
   };
   breakDuration: number; // Time between waves in milliseconds
 }
@@ -32,15 +33,17 @@ export class WaveManager {
     const spawnDelay = Math.max(1200 - this.currentWave * 80, 300); // Much faster spawning
     
     // Calculate enemy type distribution based on wave
-    let normalPercentage = Math.max(0.8 - this.currentWave * 0.05, 0.3); // Decrease normal enemies
-    let fastPercentage = Math.min(0.1 + this.currentWave * 0.03, 0.4); // Increase fast enemies
-    let bigPercentage = Math.min(0.1 + this.currentWave * 0.02, 0.3); // Increase big enemies
+    let normalPercentage = Math.max(0.75 - this.currentWave * 0.045, 0.25);
+    let fastPercentage = Math.min(0.1 + this.currentWave * 0.03, 0.35);
+    let bigPercentage = Math.min(0.1 + this.currentWave * 0.02, 0.25);
+    let shooterPercentage = Math.min(0.05 + this.currentWave * 0.02, 0.25);
 
     // Normalize percentages
-    const total = normalPercentage + fastPercentage + bigPercentage;
+    const total = normalPercentage + fastPercentage + bigPercentage + shooterPercentage;
     normalPercentage /= total;
     fastPercentage /= total;
     bigPercentage /= total;
+    shooterPercentage /= total;
 
     // Simple wave titles
     const title = `Wave ${this.currentWave}`;
@@ -50,12 +53,12 @@ export class WaveManager {
       title,
       enemyCount: baseEnemyCount,
       spawnDelay,
-      enemyTypes: {
-        normal: normalPercentage,
-        fast: fastPercentage,
-        big: bigPercentage
-      },
-      breakDuration: 3000 // Fixed 3 second break between waves
+        enemyTypes: {
+          normal: normalPercentage,
+          fast: fastPercentage,
+          big: bigPercentage,
+          shooter: shooterPercentage
+        },      breakDuration: 3000 // Fixed 3 second break between waves
     };
   }
 

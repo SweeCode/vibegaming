@@ -6,7 +6,13 @@ export class StartMenuScene extends Phaser.Scene {
   private leaderboardButton!: Phaser.GameObjects.Text;
   private gameModesButton?: Phaser.GameObjects.Text;
   private titleText!: Phaser.GameObjects.Text;
+  private leaderboardTitle?: Phaser.GameObjects.Text;
   private leaderboardDisplay?: Phaser.GameObjects.Text;
+  private leaderboardContainer?: Phaser.GameObjects.Container;
+  private leaderboardScrollY: number = 0;
+  private leaderboardHeader?: Phaser.GameObjects.Text;
+  private leaderboardBg?: Phaser.GameObjects.Rectangle;
+  private leaderboardMaskShape?: Phaser.GameObjects.Rectangle;
   private backButton?: Phaser.GameObjects.Text;
   private classicButton?: Phaser.GameObjects.Text;
   private waveButton?: Phaser.GameObjects.Text;
@@ -22,6 +28,7 @@ export class StartMenuScene extends Phaser.Scene {
   init() {
     // Reset any state when the scene starts
     this.showingLeaderboard = false;
+    this.showingModes = false;
     this.currentLeaderboardMode = 'endless';
   }
 
@@ -181,6 +188,7 @@ export class StartMenuScene extends Phaser.Scene {
     this.optionsButton.setVisible(false);
     this.leaderboardButton.setVisible(false);
     this.gameModesButton?.setVisible(false);
+    this.titleText.setVisible(false);
 
     // Show leaderboard mode selection
     this.showLeaderboardModeSelection();
@@ -191,39 +199,54 @@ export class StartMenuScene extends Phaser.Scene {
     const centerY = this.scale.height / 2;
 
     // Mode selection title
-    this.add.text(centerX, centerY - 150, 'SELECT LEADERBOARD', {
+    if (this.leaderboardTitle) { this.leaderboardTitle.destroy(); this.leaderboardTitle = undefined; }
+    this.leaderboardTitle = this.add.text(centerX, centerY - 200, 'SELECT LEADERBOARD', {
       fontSize: '32px',
       color: '#ffffff',
       fontStyle: 'bold'
     }).setOrigin(0.5);
 
-    // Classic mode button
-    this.classicButton = this.add.text(centerX - 100, centerY - 50, 'CLASSIC', {
+    // Classic mode button (above the list)
+    this.classicButton = this.add.text(centerX - 100, centerY - 140, 'CLASSIC', {
       fontSize: '24px',
       color: '#00ff00',
       backgroundColor: this.currentLeaderboardMode === 'endless' ? '#006600' : '#004400',
       padding: { x: 20, y: 10 }
     }).setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.showSpecificLeaderboard('endless'), this)
+      .on('pointerdown', () => { if (this.currentLeaderboardMode !== 'endless') this.showSpecificLeaderboard('endless'); }, this)
       .on('pointerover', () => this.classicButton?.setStyle({ backgroundColor: '#006600' }))
       .on('pointerout', () => this.classicButton?.setStyle({ 
         backgroundColor: this.currentLeaderboardMode === 'endless' ? '#006600' : '#004400' 
       }));
 
-    // Wave mode button
-    this.waveButton = this.add.text(centerX + 100, centerY - 50, 'WAVE', {
+    // Wave mode button (above the list)
+    this.waveButton = this.add.text(centerX + 100, centerY - 140, 'WAVE', {
       fontSize: '24px',
       color: '#ff00ff',
       backgroundColor: this.currentLeaderboardMode === 'wave' ? '#660066' : '#440044',
       padding: { x: 20, y: 10 }
     }).setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.showSpecificLeaderboard('wave'), this)
+      .on('pointerdown', () => { if (this.currentLeaderboardMode !== 'wave') this.showSpecificLeaderboard('wave'); }, this)
       .on('pointerover', () => this.waveButton?.setStyle({ backgroundColor: '#660066' }))
       .on('pointerout', () => this.waveButton?.setStyle({ 
         backgroundColor: this.currentLeaderboardMode === 'wave' ? '#660066' : '#440044' 
       }));
+
+    // Back button below the list (create once)
+    if (!this.backButton) {
+      this.backButton = this.add.text(centerX, centerY + 220, 'BACK', {
+        fontSize: '24px',
+        color: '#ffffff',
+        backgroundColor: '#660000',
+        padding: { x: 20, y: 10 }
+      }).setOrigin(0.5)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', this.hideLeaderboard, this)
+        .on('pointerover', () => this.backButton?.setStyle({ backgroundColor: '#880000' }))
+        .on('pointerout', () => this.backButton?.setStyle({ backgroundColor: '#660000' }));
+    }
 
     // Show the default leaderboard
     this.showSpecificLeaderboard(this.currentLeaderboardMode);
@@ -244,52 +267,91 @@ export class StartMenuScene extends Phaser.Scene {
       });
     }
 
-    // Remove existing leaderboard display
+    // Remove existing leaderboard display and listeners
     if (this.leaderboardDisplay) {
       this.leaderboardDisplay.destroy();
+      this.leaderboardDisplay = undefined;
     }
+    if (this.leaderboardContainer) {
+      this.leaderboardContainer.destroy(true);
+      this.leaderboardContainer = undefined;
+    }
+    this.input.removeAllListeners('wheel');
+    this.leaderboardScrollY = 0;
 
     // Get scores for the selected mode
     const leaderboardKey = mode === 'wave' ? 'leaderboard_wave' : 'leaderboard';
     const scores = JSON.parse(localStorage.getItem(leaderboardKey) || '[]');
     console.log(`${mode} leaderboard data:`, scores);
 
-    let leaderboardText = `${mode.toUpperCase()} MODE LEADERBOARD\n\n`;
+    // Header
+    if (this.leaderboardHeader) { this.leaderboardHeader.destroy(); this.leaderboardHeader = undefined; }
+    this.leaderboardHeader = this.add.text(this.scale.width / 2, this.scale.height / 2 - 100, `${mode.toUpperCase()} MODE LEADERBOARD`, {
+      fontSize: '26px', color: '#ffffff', fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    // Scrollable list container
+    const listX = this.scale.width / 2;
+    const listY = this.scale.height / 2;
+    this.leaderboardContainer = this.add.container(listX, listY);
+    this.leaderboardScrollY = 0;
+
+    const rowHeight = 22;
+    const fontSize = '16px';
+    const panelWidth = this.scale.width * 0.6;
+    const panelHeight = 260; // fits between buttons
+    const maxVisible = Math.floor(panelHeight / rowHeight);
+
     if (scores.length === 0) {
-      leaderboardText += 'No scores yet!\nPlay a game to set your first score.';
+      const empty = this.add.text(0, 0, 'No scores yet!\nPlay a game to set your first score.', { fontSize: '18px', color: '#ffffff', align: 'center' }).setOrigin(0.5);
+      this.leaderboardContainer.add(empty);
     } else {
-      scores.slice(0, 20).forEach((entry: number | {name?: string, score: number, time: number}, index: number) => {
+      scores.forEach((entry: number | {name?: string, score: number, time: number}, index: number) => {
+        let text = '';
         if (typeof entry === 'number') {
-          // Old format - just score
-          leaderboardText += `${index + 1}. ${entry.toLocaleString()}\n`;
-        } else if (entry && typeof entry === 'object') {
-          // New format with name, score, and time
+          text = `${index + 1}. ${entry.toLocaleString()}`;
+        } else {
           const name = entry.name || 'Anonymous';
           const score = entry.score || 0;
           const time = entry.time || 0;
-          
           const minutes = Math.floor(time / 60);
           const seconds = time % 60;
           const formattedTime = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-          
-          if (mode === 'wave') {
-            leaderboardText += `${index + 1}. ${name}: ${score.toLocaleString()} (${formattedTime})\n`;
-          } else {
-            leaderboardText += `${index + 1}. ${name}: ${score.toLocaleString()} (${formattedTime})\n`;
-          }
-        } else {
-          leaderboardText += `${index + 1}. Invalid entry\n`;
+          text = `${index + 1}. ${name}: ${score.toLocaleString()} (${formattedTime})`;
         }
+        const row = this.add.text(0, index * rowHeight, text, { fontSize, color: '#ffffff' }).setOrigin(0.5, 0);
+        this.leaderboardContainer?.add(row);
       });
     }
 
-    this.leaderboardDisplay = this.add.text(this.scale.width / 2, this.scale.height / 2 + 50, leaderboardText, {
-      fontSize: '20px',
-      color: '#ffffff',
-      align: 'center',
-      backgroundColor: '#000044',
-      padding: { x: 30, y: 20 }
-    }).setOrigin(0.5);
+    // Mask to clip overflow and background panel behind list (do not cover controls)
+    if (this.leaderboardMaskShape) { this.leaderboardMaskShape.destroy(); this.leaderboardMaskShape = undefined; }
+    this.leaderboardMaskShape = this.add.rectangle(listX, listY, panelWidth, maxVisible * rowHeight, 0x000000, 0).setOrigin(0.5);
+    this.leaderboardContainer.setMask(this.leaderboardMaskShape.createGeometryMask());
+
+    if (this.leaderboardBg) { this.leaderboardBg.destroy(); this.leaderboardBg = undefined; }
+    this.leaderboardBg = this.add.rectangle(listX, listY, panelWidth, maxVisible * rowHeight + 20, 0x000044, 0.6).setOrigin(0.5);
+
+    // Scroll handlers
+    this.input.on('wheel', (_pointer: Phaser.Input.Pointer, _go: unknown, _dx: number, dy: number) => {
+      const totalHeight = (scores.length) * rowHeight;
+      const limit = Math.max(0, totalHeight - maxVisible * rowHeight);
+      this.leaderboardScrollY = Phaser.Math.Clamp(this.leaderboardScrollY + dy, -limit, 0);
+      this.leaderboardContainer?.setY(listY + this.leaderboardScrollY);
+    });
+
+    this.input.keyboard?.on('keydown', (e: KeyboardEvent) => {
+      const step = rowHeight * 3;
+      const totalHeight = (scores.length) * rowHeight;
+      const limit = Math.max(0, totalHeight - maxVisible * rowHeight);
+      if (e.key === 'ArrowDown' || e.key === 'PageDown') {
+        this.leaderboardScrollY = Phaser.Math.Clamp(this.leaderboardScrollY + step, -limit, 0);
+        this.leaderboardContainer?.setY(listY + this.leaderboardScrollY);
+      } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+        this.leaderboardScrollY = Phaser.Math.Clamp(this.leaderboardScrollY - step, -limit, 0);
+        this.leaderboardContainer?.setY(listY + this.leaderboardScrollY);
+      }
+    });
 
     // Back button (only create once)
     if (!this.backButton) {
@@ -307,37 +369,30 @@ export class StartMenuScene extends Phaser.Scene {
   }
 
   private hideLeaderboard() {
-    console.log('hideLeaderboard called, currently showing:', this.showingLeaderboard); // Debug log
     if (!this.showingLeaderboard) return;
-
     this.showingLeaderboard = false;
 
-    // Show main menu buttons
     this.startButton.setVisible(true);
     this.optionsButton.setVisible(true);
     this.leaderboardButton.setVisible(true);
     this.gameModesButton?.setVisible(true);
 
-    // Hide leaderboard display
-    if (this.leaderboardDisplay) {
-      this.leaderboardDisplay.destroy();
-      this.leaderboardDisplay = undefined;
-    }
+    if (this.leaderboardDisplay) { this.leaderboardDisplay.destroy(); this.leaderboardDisplay = undefined; }
+    if (this.leaderboardContainer) { this.leaderboardContainer.destroy(true); this.leaderboardContainer = undefined; }
+    this.input.removeAllListeners('wheel');
+    this.input.keyboard?.removeAllListeners();
+    this.currentLeaderboardMode = 'endless';
 
-    if (this.backButton) {
-      this.backButton.destroy();
-      this.backButton = undefined;
-    }
+    if (this.leaderboardHeader) { this.leaderboardHeader.destroy(); this.leaderboardHeader = undefined; }
+    if (this.leaderboardBg) { this.leaderboardBg.destroy(); this.leaderboardBg = undefined; }
+    if (this.leaderboardMaskShape) { this.leaderboardMaskShape.destroy(); this.leaderboardMaskShape = undefined; }
+    if (this.leaderboardTitle) { this.leaderboardTitle.destroy(); this.leaderboardTitle = undefined; }
 
-    if (this.classicButton) {
-      this.classicButton.destroy();
-      this.classicButton = undefined;
-    }
+    if (this.backButton) { this.backButton.destroy(); this.backButton = undefined; }
+    if (this.classicButton) { this.classicButton.destroy(); this.classicButton = undefined; }
+    if (this.waveButton) { this.waveButton.destroy(); this.waveButton = undefined; }
 
-    if (this.waveButton) {
-      this.waveButton.destroy();
-      this.waveButton = undefined;
-    }
+    this.titleText.setVisible(true);
   }
 
   private setupKeyboardShortcuts() {
