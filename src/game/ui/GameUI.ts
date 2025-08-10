@@ -27,7 +27,8 @@ export class GameUI {
       color: '#fff' 
     });
     
-    this.ammoText = this.scene.add.text(16, 50, `Ammo: ${GAME_SETTINGS.weapons.bullet.maxAmmo}`, { 
+    // Initial ammo should be set by scene via updateAmmo
+    this.ammoText = this.scene.add.text(16, 50, `Ammo: --`, { 
       fontSize: '32px', 
       color: '#fff' 
     });

@@ -1,7 +1,7 @@
 import * as Phaser from 'phaser';
 import { GAME_SETTINGS } from '../config/gameConfig';
 import { Player } from '../objects/Player';
-import { Enemy, EnemySpawner } from '../objects/Enemy';
+import { Enemy, EnemySpawner, MiniEnemy } from '../objects/Enemy';
 import { GameUI } from '../ui/GameUI';
 import { ReloadingBar } from '../ui/ReloadingBar';
 import { DifficultyManager } from '../systems/DifficultyManager';
@@ -73,10 +73,20 @@ export class MainScene extends Phaser.Scene {
   }
 
    private createTextures() {
-     const shooterGraphics = this.make.graphics({ fillStyle: { color: 0xFFA500 } }, false);
+    const shooterGraphics = this.make.graphics({ fillStyle: { color: 0xFFA500 } }, false);
      shooterGraphics.fillRect(0, 0, 24, 24);
      shooterGraphics.generateTexture('enemy_shooter', 24, 24);
      shooterGraphics.destroy();
+
+    const splitterGraphics = this.make.graphics({ fillStyle: { color: 0x00FFFF } }, false);
+    splitterGraphics.fillRect(0, 0, 28, 28);
+    splitterGraphics.generateTexture('enemy_splitter', 28, 28);
+    splitterGraphics.destroy();
+
+    const miniGraphics = this.make.graphics({ fillStyle: { color: 0x66FFFF } }, false);
+    miniGraphics.fillRect(0, 0, 14, 14);
+    miniGraphics.generateTexture('enemy_mini', 14, 14);
+    miniGraphics.destroy();
 
      const enemyBulletG = this.make.graphics(undefined, false);
      enemyBulletG.lineStyle(2, 0xFFFFFF, 1);
@@ -119,9 +129,10 @@ export class MainScene extends Phaser.Scene {
   }
 
   private createBullets() {
+    const playerStats = this.upgradeManager.getPlayerStats();
     this.bullets = this.physics.add.group({
       defaultKey: 'bullet',
-      maxSize: GAME_SETTINGS.weapons.bullet.maxAmmo
+      maxSize: Math.max(playerStats.maxAmmo, GAME_SETTINGS.weapons.bullet.maxAmmo)
     });
   }
 
@@ -137,6 +148,7 @@ export class MainScene extends Phaser.Scene {
 
   private createUI() {
     this.gameUI = new GameUI(this);
+    this.gameUI.updateAmmo(this.ammo);
   }
 
   private createReloadingBar() {
@@ -191,10 +203,24 @@ export class MainScene extends Phaser.Scene {
 
     bulletObj.setActive(false).setVisible(false);
     
-    const isDead = enemyObj.takeDamage(1);
+    const playerStats = this.upgradeManager.getPlayerStats();
+    const isDead = enemyObj.takeDamage(playerStats.bulletDamage);
     if (isDead) {
       this.score += enemyObj.getScoreValue();
+      // Split behavior: if splitter, spawn minis
+      const isSplitter = (enemyObj as unknown as Phaser.GameObjects.Sprite).texture?.key === 'enemy_splitter';
+      const spawnMinis = isSplitter ? GAME_SETTINGS.enemies.splitter.minisOnSplit : 0;
+      const ex = (enemyObj as Phaser.GameObjects.Sprite).x;
+      const ey = (enemyObj as Phaser.GameObjects.Sprite).y;
       enemyObj.destroy();
+      if (isSplitter && this.enemies) {
+        for (let i = 0; i < spawnMinis; i++) {
+          const angle = (Math.PI * 2 * i) / spawnMinis + Math.random() * 0.5;
+          const offset = 10;
+          const mini = new MiniEnemy(this, ex + Math.cos(angle) * offset, ey + Math.sin(angle) * offset, this.player);
+          this.enemies.add(mini);
+        }
+      }
       this.updateDifficulty();
       this.gameUI.updateScore(this.score);
     }
@@ -202,7 +228,20 @@ export class MainScene extends Phaser.Scene {
 
   private handlePlayerEnemyCollision(player: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile, enemy: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile) {
     const enemyObj = enemy as Enemy;
+    // Split behavior on collision as well
+    const isSplitter = (enemyObj as unknown as Phaser.GameObjects.Sprite).texture?.key === 'enemy_splitter';
+    const spawnMinis = isSplitter ? GAME_SETTINGS.enemies.splitter.minisOnSplit : 0;
+    const ex = (enemyObj as Phaser.GameObjects.Sprite).x;
+    const ey = (enemyObj as Phaser.GameObjects.Sprite).y;
     enemyObj.destroy();
+    if (isSplitter && this.enemies) {
+      for (let i = 0; i < spawnMinis; i++) {
+        const angle = (Math.PI * 2 * i) / spawnMinis + Math.random() * 0.5;
+        const offset = 10;
+        const mini = new MiniEnemy(this, ex + Math.cos(angle) * offset, ey + Math.sin(angle) * offset, this.player);
+        this.enemies.add(mini);
+      }
+    }
     
     const isDead = this.player.takeDamage(GAME_SETTINGS.player.damagePerHit);
     this.gameUI.updateHealthBar(this.player.getHealthPercentage());

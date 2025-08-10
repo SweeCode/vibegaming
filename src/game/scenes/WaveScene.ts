@@ -1,7 +1,7 @@
 import * as Phaser from 'phaser';
 import { GAME_SETTINGS } from '../config/gameConfig';
 import { Player } from '../objects/Player';
-import { Enemy, EnemySpawner } from '../objects/Enemy';
+import { Enemy, EnemySpawner, MiniEnemy, Boss, SentinelBoss, ArtilleryBoss } from '../objects/Enemy';
 import { GameUI } from '../ui/GameUI';
 import { ReloadingBar } from '../ui/ReloadingBar';
 import { WaveManager } from '../systems/WaveManager';
@@ -17,6 +17,10 @@ export class WaveScene extends Phaser.Scene {
   private reloadingBar!: ReloadingBar;
   private waveManager!: WaveManager;
   private upgradeManager!: UpgradeManager;
+  private boss?: Boss;
+  private bossHealthBar?: Phaser.GameObjects.Graphics;
+  private bossHealthText?: Phaser.GameObjects.Text;
+  private bossAddTimer?: Phaser.Time.TimerEvent;
   private score = 0;
   private ammo = GAME_SETTINGS.weapons.bullet.maxAmmo;
   private maxAmmo = GAME_SETTINGS.weapons.bullet.maxAmmo;
@@ -75,6 +79,10 @@ export class WaveScene extends Phaser.Scene {
 
     this.updateBullets();
     this.updateEnemies();
+    if (this.boss && this.boss.active) {
+      // Ensure boss AI/movement runs
+      (this.boss as Boss).update();
+    }
     if (this.player) this.player.update();
     if (this.reloadingBar) this.reloadingBar.update();
     this.updateTimer();
@@ -112,6 +120,16 @@ export class WaveScene extends Phaser.Scene {
     shooterGraphics.generateTexture('enemy_shooter', 24, 24);
     shooterGraphics.destroy();
 
+    const splitterGraphics = this.make.graphics({ fillStyle: { color: 0x00FFFF } }, false);
+    splitterGraphics.fillRect(0, 0, 28, 28);
+    splitterGraphics.generateTexture('enemy_splitter', 28, 28);
+    splitterGraphics.destroy();
+
+    const miniGraphics = this.make.graphics({ fillStyle: { color: 0x66FFFF } }, false);
+    miniGraphics.fillRect(0, 0, 14, 14);
+    miniGraphics.generateTexture('enemy_mini', 14, 14);
+    miniGraphics.destroy();
+
     const enemyBulletG = this.make.graphics(undefined, false);
     enemyBulletG.lineStyle(2, 0xFFFFFF, 1);
     enemyBulletG.fillStyle(0xFF0000, 1);
@@ -119,6 +137,15 @@ export class WaveScene extends Phaser.Scene {
     enemyBulletG.strokeCircle(4, 4, 4);
     enemyBulletG.generateTexture('enemy_bullet', 8, 8);
     enemyBulletG.destroy();
+
+    const boss1 = this.make.graphics({ fillStyle: { color: 0xFF3366 } }, false);
+    boss1.fillRect(0, 0, 72, 72);
+    boss1.generateTexture('boss_sentinel', 72, 72);
+    boss1.destroy();
+    const boss2 = this.make.graphics({ fillStyle: { color: 0x33FFAA } }, false);
+    boss2.fillRect(0, 0, 84, 84);
+    boss2.generateTexture('boss_artillery', 84, 84);
+    boss2.destroy();
   }
 
   private createPlayer() {
@@ -126,9 +153,10 @@ export class WaveScene extends Phaser.Scene {
   }
 
   private createBullets() {
+    const playerStats = this.upgradeManager.getPlayerStats();
     this.bullets = this.physics.add.group({
       defaultKey: 'bullet',
-      maxSize: GAME_SETTINGS.weapons.bullet.maxAmmo
+      maxSize: Math.max(playerStats.maxAmmo, GAME_SETTINGS.weapons.bullet.maxAmmo)
     });
   }
 
@@ -142,6 +170,7 @@ export class WaveScene extends Phaser.Scene {
 
   private createUI() {
     this.gameUI = new GameUI(this);
+    this.gameUI.updateAmmo(this.ammo);
   }
 
   private createReloadingBar() {
@@ -178,7 +207,12 @@ export class WaveScene extends Phaser.Scene {
   private startFirstWave() {
     this.waveManager.startWave();
     this.showWaveNotification();
-    this.setupSpawnTimer();
+    const settings = this.waveManager.getCurrentWaveSettings();
+    if (settings.isBoss) {
+      this.spawnBoss(settings.bossType || 'sentinel');
+    } else {
+      this.setupSpawnTimer();
+    }
   }
 
   private setupSpawnTimer() {
@@ -222,7 +256,8 @@ export class WaveScene extends Phaser.Scene {
     // Debug logging
     console.log(`Wave ${this.waveManager.getCurrentWave()}: Spawned ${waveProgress.spawned}/${waveProgress.total}, Killed ${waveProgress.killed}/${waveProgress.total}, Active: ${activeEnemies}`);
 
-    if (this.waveManager.isWaveComplete() && activeEnemies === 0) {
+    const bossActive = !!this.boss && this.boss.active;
+    if (!bossActive && this.waveManager.isWaveComplete() && activeEnemies === 0) {
       console.log('Wave completed! Starting break...');
       // Wave completed, start break
       this.waveManager.startBreak();
@@ -241,8 +276,119 @@ export class WaveScene extends Phaser.Scene {
     this.waveManager.startWave();
     console.log(`Now on wave ${this.waveManager.getCurrentWave()}`);
     this.showWaveNotification();
-    this.setupSpawnTimer();
+    const settings = this.waveManager.getCurrentWaveSettings();
+    if (settings.isBoss) {
+      this.spawnBoss(settings.bossType || 'sentinel');
+    } else {
+      this.setupSpawnTimer();
+    }
     this.hideBreakNotification();
+  }
+
+  private spawnBoss(type: 'sentinel' | 'artillery') {
+    this.enemies.clear(true, true);
+    if (this.spawnTimer) { this.spawnTimer.destroy(); this.spawnTimer = undefined; }
+    const x = this.scale.width / 2;
+    const y = this.scale.height / 2 - 150;
+    // Boss constructors already add themselves to the scene and physics
+    this.boss = type === 'artillery' ? new ArtilleryBoss(this, x, y, this.player) : new SentinelBoss(this, x, y, this.player);
+    this.boss.setActive(true).setVisible(true);
+    // Collisions for boss
+    this.physics.add.collider(this.bullets, this.boss, this.handleBulletBossCollision as unknown as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback, undefined, this);
+    this.physics.add.collider(this.player, this.boss, this.handlePlayerBossCollision as unknown as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback, undefined, this);
+    this.createBossHealthUI();
+    this.startBossAdds();
+  }
+
+  private createBossHealthUI() {
+    this.bossHealthBar?.destroy();
+    this.bossHealthText?.destroy();
+    this.bossHealthBar = this.add.graphics();
+    const centerX = this.scale.width / 2;
+    const topY = 30;
+    this.bossHealthText = this.add.text(centerX, topY - 16, 'BOSS', { fontSize: '18px', color: '#ff3366', fontStyle: 'bold' }).setOrigin(0.5);
+    const draw = () => {
+      if (!this.boss || !this.bossHealthBar) return;
+      const pct = (this.boss as Boss).getHealthPct();
+      const w = 420, h = 16;
+      this.bossHealthBar.clear();
+      this.bossHealthBar.fillStyle(0x222222, 0.9).fillRoundedRect(centerX - w/2, topY, w, h, 8);
+      this.bossHealthBar.fillStyle(0xff3366, 1).fillRoundedRect(centerX - w/2, topY, w * pct, h, 8);
+      this.bossHealthBar.lineStyle(2, 0xffffff, 1).strokeRoundedRect(centerX - w/2, topY, w, h, 8);
+    };
+    draw();
+  }
+
+  private updateBossHealthUI() {
+    if (!this.boss || !this.bossHealthBar) return;
+    const centerX = this.scale.width / 2;
+    const topY = 30;
+    const pct = (this.boss as Boss).getHealthPct();
+    const w = 420, h = 16;
+    this.bossHealthBar.clear();
+    this.bossHealthBar.fillStyle(0x222222, 0.9).fillRoundedRect(centerX - w/2, topY, w, h, 8);
+    this.bossHealthBar.fillStyle(0xff3366, 1).fillRoundedRect(centerX - w/2, topY, w * pct, h, 8);
+    this.bossHealthBar.lineStyle(2, 0xffffff, 1).strokeRoundedRect(centerX - w/2, topY, w, h, 8);
+  }
+
+  private startBossAdds() {
+    this.stopBossAdds();
+    this.bossAddTimer = this.time.addEvent({
+      delay: 3000,
+      loop: true,
+      callback: () => this.spawnBossAdd()
+    });
+  }
+
+  private stopBossAdds() {
+    if (this.bossAddTimer) {
+      this.bossAddTimer.remove();
+      this.bossAddTimer = undefined;
+    }
+  }
+
+  private spawnBossAdd() {
+    if (!this.boss || !this.boss.active) return;
+    const r = Math.random();
+    const waveSettings = this.waveManager.getCurrentWaveSettings();
+    // Temporarily bias to fast/shooter during boss
+    const tempSettings = { ...waveSettings, enemyTypes: { ...waveSettings.enemyTypes, normal: 0.2, fast: 0.4, big: 0.15, shooter: 0.25, splitter: 0 } };
+    this.enemySpawner.spawnWithWave(tempSettings);
+  }
+
+  private handleBulletBossCollision(bulletObj: Phaser.GameObjects.GameObject, _bossObj: Phaser.GameObjects.GameObject) {
+    const bullet = bulletObj as Phaser.GameObjects.Sprite;
+    if (!bullet.active || !this.boss) return;
+    bullet.setActive(false).setVisible(false);
+    const dmg = this.upgradeManager.getPlayerStats().bulletDamage;
+    const dead = (this.boss as Boss).takeDamage(dmg);
+    this.updateBossHealthUI();
+    if (dead) {
+      this.score += (this.boss as Boss).getScoreValue();
+      (this.boss as Boss).destroy();
+      this.boss = undefined;
+      this.bossHealthBar?.destroy(); this.bossHealthBar = undefined;
+      this.bossHealthText?.destroy(); this.bossHealthText = undefined;
+      this.stopBossAdds();
+      // Camera shake for dramatic finish
+      this.cameras.main.shake(200, 0.01);
+      // Begin break
+      this.waveManager.startBreak();
+      this.showBreakNotification();
+      const waveSettings = this.waveManager.getCurrentWaveSettings();
+      this.breakTimer = this.time.delayedCall(waveSettings.breakDuration, () => {
+        this.startNextWave();
+      });
+    }
+  }
+
+  private handlePlayerBossCollision(_playerObj: Phaser.GameObjects.GameObject) {
+    if (!this.boss) return;
+    // Damage player on contact and slight knockback feeling via camera shake
+    this.cameras.main.shake(100, 0.006);
+    const isDead = this.player.takeDamage(GAME_SETTINGS.player.damagePerHit * 2);
+    this.gameUI.updateHealthBar(this.player.getHealthPercentage());
+    if (isDead) this.handleGameOver();
   }
 
   private showWaveNotification() {
@@ -323,14 +469,64 @@ export class WaveScene extends Phaser.Scene {
 
     if (!bulletObj.active || !enemyObj.active) return;
 
+    // If a boss is present and this bullet also overlaps the boss, route to boss handler
+    if (this.boss && this.boss.active) {
+      const bossSprite = this.boss as unknown as Phaser.GameObjects.Sprite;
+      if (Phaser.Geom.Intersects.RectangleToRectangle(bulletObj.getBounds(), bossSprite.getBounds())) {
+        this.handleBulletBossCollision(bulletObj, bossSprite);
+        return;
+      }
+    }
+
     bulletObj.setActive(false).setVisible(false);
     
-    const isDead = enemyObj.takeDamage(1);
-    if (isDead) {
+    const playerStats = this.upgradeManager.getPlayerStats();
+    let deadProcessed = false;
+    // Boss hit?
+    if (this.boss && (enemy as unknown) === (this.boss.body as unknown)) {
+      const sprite = this.boss as Boss;
+      const bossDead = sprite.takeDamage(playerStats.bulletDamage);
+      if (this.bossHealthBar) { this.bossHealthBar.clear(); }
+      if (bossDead) {
+        this.score += sprite.getScoreValue();
+        sprite.destroy();
+        this.boss = undefined;
+        this.bossHealthBar?.destroy(); this.bossHealthBar = undefined;
+        this.bossHealthText?.destroy(); this.bossHealthText = undefined;
+        deadProcessed = true;
+        // Start break immediately
+        this.waveManager.startBreak();
+        this.showBreakNotification();
+        const waveSettings = this.waveManager.getCurrentWaveSettings();
+        this.breakTimer = this.time.delayedCall(waveSettings.breakDuration, () => {
+          this.startNextWave();
+        });
+      }
+    } else {
+      const isDead = enemyObj.takeDamage(playerStats.bulletDamage);
+      if (isDead) {
+        deadProcessed = true;
+        this.score += enemyObj.getScoreValue();
+        const isSplitter = (enemyObj as unknown as Phaser.GameObjects.Sprite).texture?.key === 'enemy_splitter';
+        const spawnMinis = isSplitter ? GAME_SETTINGS.enemies.splitter.minisOnSplit : 0;
+        const ex = (enemyObj as Phaser.GameObjects.Sprite).x;
+        const ey = (enemyObj as Phaser.GameObjects.Sprite).y;
+        enemyObj.destroy();
+        if (isSplitter && this.enemies) {
+          for (let i = 0; i < spawnMinis; i++) {
+            const angle = (Math.PI * 2 * i) / spawnMinis + Math.random() * 0.5;
+            const offset = 10;
+            const mini = new MiniEnemy(this, ex + Math.cos(angle) * offset, ey + Math.sin(angle) * offset, this.player);
+            this.enemies.add(mini);
+          }
+        }
+        this.waveManager.onEnemyKilled();
+        console.log(`Enemy killed! Wave progress: ${this.waveManager.getWaveProgress().killed}/${this.waveManager.getWaveProgress().total}`);
+        this.gameUI.updateScore(this.score);
+      }
+    }
+    if (deadProcessed) {
       this.score += enemyObj.getScoreValue();
-      enemyObj.destroy();
-      this.waveManager.onEnemyKilled();
-      console.log(`Enemy killed! Wave progress: ${this.waveManager.getWaveProgress().killed}/${this.waveManager.getWaveProgress().total}`);
       this.gameUI.updateScore(this.score);
     }
   }
@@ -342,7 +538,20 @@ export class WaveScene extends Phaser.Scene {
     this.score += enemyObj.getScoreValue();
     this.gameUI.updateScore(this.score);
     
+    // Splitter behavior on collision
+    const isSplitter = (enemyObj as unknown as Phaser.GameObjects.Sprite).texture?.key === 'enemy_splitter';
+    const spawnMinis = isSplitter ? GAME_SETTINGS.enemies.splitter.minisOnSplit : 0;
+    const ex = (enemyObj as Phaser.GameObjects.Sprite).x;
+    const ey = (enemyObj as Phaser.GameObjects.Sprite).y;
     enemyObj.destroy();
+    if (isSplitter && this.enemies) {
+      for (let i = 0; i < spawnMinis; i++) {
+        const angle = (Math.PI * 2 * i) / spawnMinis + Math.random() * 0.5;
+        const offset = 10;
+        const mini = new MiniEnemy(this, ex + Math.cos(angle) * offset, ey + Math.sin(angle) * offset, this.player);
+        this.enemies.add(mini);
+      }
+    }
     
     // Count this as an enemy killed for wave progression
     this.waveManager.onEnemyKilled();

@@ -1,0 +1,31 @@
+import { defineSchema, defineTable } from 'convex/server'
+import { v } from 'convex/values'
+
+export default defineSchema({
+  scores: defineTable({
+    name: v.string(),
+    score: v.number(),
+    time: v.number(), // seconds
+    mode: v.union(v.literal('endless'), v.literal('wave')),
+    deviceId: v.string(),
+    createdAt: v.number() // Date.now()
+  })
+    .index('by_mode_score_time', [
+      'mode',
+      'score',
+      'time',
+      'createdAt'
+    ]),
+  upgrades: defineTable({
+    deviceId: v.string(),
+    levels: v.object({
+      health: v.number(),
+      speed: v.number(),
+      maxAmmo: v.number(),
+      reloadSpeed: v.number(),
+      bulletSpeed: v.number(),
+      bulletDamage: v.number()
+    }),
+    updatedAt: v.number()
+  }).index('by_device', ['deviceId'])
+})

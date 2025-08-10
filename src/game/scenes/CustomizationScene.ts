@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { UpgradeManager, UpgradeLevels } from '../systems/UpgradeManager';
+import { UpgradeManager, UpgradeLevels, PlayerStats } from '../systems/UpgradeManager';
 
 export class CustomizationScene extends Phaser.Scene {
   private upgradeManager!: UpgradeManager;
@@ -12,14 +12,17 @@ export class CustomizationScene extends Phaser.Scene {
   private upgradeButtons: { [key: string]: Phaser.GameObjects.Text } = {};
   private costTexts: { [key: string]: Phaser.GameObjects.Text } = {};
   private levelTexts: { [key: string]: Phaser.GameObjects.Text } = {};
+  private tooltip?: Phaser.GameObjects.Text;
 
   constructor() {
     super({ key: 'CustomizationScene' });
   }
 
-  init(data: { currentScore?: number } = {}) {
-    this.currentScore = data.currentScore || this.getTotalScore();
+  init(_data: { currentScore?: number } = {}) {
     this.upgradeManager = new UpgradeManager();
+    const totalScore = this.getTotalScore();
+    const totalSpent = this.upgradeManager.getTotalSpent();
+    this.currentScore = Math.max(0, totalScore - totalSpent);
   }
 
   create() {
@@ -47,6 +50,14 @@ export class CustomizationScene extends Phaser.Scene {
 
     // Stats and upgrade interface
     this.createStatsInterface();
+
+    // Attempt to load remote upgrades and refresh UI when done
+    this.upgradeManager.loadFromRemote().then(() => {
+      const totalScore = this.getTotalScore();
+      const totalSpent = this.upgradeManager.getTotalSpent();
+      this.currentScore = Math.max(0, totalScore - totalSpent);
+      this.updateAllDisplays();
+    }).catch(() => {});
 
     // Control buttons
     this.createControlButtons();
@@ -149,7 +160,7 @@ export class CustomizationScene extends Phaser.Scene {
       color: '#aaaaaa'
     }).setOrigin(0.5);
 
-    // Cost and upgrade button
+    // Cost and upgrade button + Buy Max
     if (!isMaxLevel) {
       this.costTexts[statKey] = this.add.text(x + 50, y - 10, `Cost: ${cost.toLocaleString()}`, {
         fontSize: '14px',
@@ -166,17 +177,33 @@ export class CustomizationScene extends Phaser.Scene {
       if (canUpgrade) {
         this.upgradeButtons[statKey]
           .setInteractive({ useHandCursor: true })
-          .on('pointerdown', () => this.handleUpgrade(statKey))
+          .on('pointerdown', (pointer: Phaser.Input.Pointer) => this.handleUpgrade(statKey, (pointer.event as KeyboardEvent | MouseEvent)?.shiftKey === true))
           .on('pointerover', () => {
             if (canUpgrade) {
               this.upgradeButtons[statKey].setStyle({ backgroundColor: '#006600' });
+              this.showTooltip(x + 180, y + 15, statKey);
             }
           })
           .on('pointerout', () => {
             if (canUpgrade) {
               this.upgradeButtons[statKey].setStyle({ backgroundColor: '#004400' });
             }
+            this.hideTooltip();
           });
+
+        // Buy Max button
+        const buyMaxBtn = this.add.text(x + 150, y + 15, 'BUY MAX', {
+          fontSize: '14px',
+          color: canUpgrade ? '#ffffff' : '#888888',
+          backgroundColor: canUpgrade ? '#003366' : '#333333',
+          padding: { x: 10, y: 4 }
+        }).setOrigin(0.5);
+        if (canUpgrade) {
+          buyMaxBtn.setInteractive({ useHandCursor: true })
+            .on('pointerdown', () => this.handleUpgrade(statKey, true))
+            .on('pointerover', () => buyMaxBtn.setStyle({ backgroundColor: '#004c99' }))
+            .on('pointerout', () => buyMaxBtn.setStyle({ backgroundColor: '#003366' }));
+        }
       }
     } else {
       this.add.text(x + 50, y, 'MAX LEVEL', {
@@ -216,15 +243,54 @@ export class CustomizationScene extends Phaser.Scene {
       .on('pointerout', () => this.resetButton.setStyle({ backgroundColor: '#444400' }));
   }
 
-  private handleUpgrade(statKey: keyof UpgradeLevels) {
-    const result = this.upgradeManager.upgrade(statKey, this.currentScore);
-    
-    if (result.success) {
-      this.currentScore = result.newScore;
+  private handleUpgrade(statKey: keyof UpgradeLevels, buyMax: boolean = false) {
+    let purchased = 0;
+    let totalCost = 0;
+    if (buyMax) {
+      // Attempt up to 5 levels or until points run out/maxed
+      for (let i = 0; i < 5; i++) {
+        const attempt = this.upgradeManager.upgrade(statKey, this.currentScore - totalCost);
+        if (!attempt.success) break;
+        purchased++;
+        totalCost += attempt.cost;
+      }
+    } else {
+      const res = this.upgradeManager.upgrade(statKey, this.currentScore);
+      if (res.success) {
+        purchased = 1;
+        totalCost = res.cost;
+      }
+    }
+
+    if (purchased > 0) {
+      const totalScore = this.getTotalScore();
+      const totalSpent = this.upgradeManager.getTotalSpent();
+      this.currentScore = Math.max(0, totalScore - totalSpent);
       this.updateAllDisplays();
-      
-      // Show upgrade feedback
-      this.showUpgradeNotification(statKey, result.cost);
+      this.showUpgradeNotification(statKey, totalCost);
+    }
+  }
+
+  private showTooltip(x: number, y: number, statKey: keyof UpgradeLevels) {
+    const stats = this.upgradeManager.getPlayerStats();
+    const inc = this.upgradeManager.getStatIncrease(statKey);
+    const nextCost = this.upgradeManager.getUpgradeCost(statKey);
+    const current = (stats as PlayerStats)[statKey as keyof PlayerStats] as number;
+    const next = statKey === 'reloadSpeed' ? Math.max(0, current - inc) : current + inc;
+    const lines = `Current: ${current}\nNext: ${next}\nCost: ${nextCost.toLocaleString()}\n(Shift+Click buys up to 5)`;
+    this.tooltip?.destroy();
+    this.tooltip = this.add.text(x, y, lines, {
+      fontSize: '12px',
+      color: '#ffffee',
+      backgroundColor: '#000000',
+      padding: { x: 8, y: 6 }
+    }).setOrigin(0, 0.5);
+  }
+
+  private hideTooltip() {
+    if (this.tooltip) {
+      this.tooltip.destroy();
+      this.tooltip = undefined;
     }
   }
 
@@ -312,9 +378,10 @@ export class CustomizationScene extends Phaser.Scene {
     }).setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
-        const totalSpent = this.upgradeManager.getTotalSpent();
         this.upgradeManager.resetUpgrades();
-        this.currentScore += totalSpent; // Refund all spent points
+        const totalScore = this.getTotalScore();
+        const totalSpentAfter = this.upgradeManager.getTotalSpent();
+        this.currentScore = Math.max(0, totalScore - totalSpentAfter);
         this.updateAllDisplays();
         confirmText.destroy();
         confirmButton.destroy();

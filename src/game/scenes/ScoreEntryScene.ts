@@ -1,4 +1,5 @@
 import * as Phaser from 'phaser';
+import { submitScoreConvex } from '@/lib/convexClient';
 
 export class ScoreEntryScene extends Phaser.Scene {
   private score: number = 0;
@@ -58,49 +59,74 @@ export class ScoreEntryScene extends Phaser.Scene {
       color: '#ffffff'
     }).setOrigin(0.5);
 
-    // Instructions
-    this.instructionText = this.add.text(centerX, centerY + 20, 'Enter your name:', {
-      fontSize: '28px',
-      color: '#ffffff'
-    }).setOrigin(0.5);
+    // Determine if this is a top 10 score for this mode
+    const leaderboardKey = this.gameMode === 'wave' ? 'leaderboard_wave' : 'leaderboard';
+    const existing = JSON.parse(localStorage.getItem(leaderboardKey) || '[]') as Array<{score: number, time: number}>;
+    const combined = [...existing, { score: this.score, time: this.gameTime }];
+    combined.sort((a, b) => (b.score !== a.score ? b.score - a.score : a.time - b.time));
+    const rank = combined.findIndex(e => e.score === this.score && e.time === this.gameTime) + 1;
+    const isTopTen = rank > 0 && rank <= 10;
 
-    // Name input display
-    this.nameInput = this.add.text(centerX, centerY + 70, '_', {
-      fontSize: '36px',
-      color: '#00ff00',
-      backgroundColor: '#003300',
-      padding: { x: 20, y: 10 },
-      fontFamily: 'monospace'
-    }).setOrigin(0.5);
+    if (isTopTen) {
+      // Instructions
+      this.instructionText = this.add.text(centerX, centerY + 20, 'Enter your name:', {
+        fontSize: '28px',
+        color: '#ffffff'
+      }).setOrigin(0.5);
 
-    // Save button
-    this.saveButton = this.add.text(centerX - 80, centerY + 140, 'SAVE', {
-      fontSize: '24px',
-      color: '#ffffff',
-      backgroundColor: '#004400',
-      padding: { x: 20, y: 10 }
-    }).setOrigin(0.5)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', this.saveScore, this)
-      .on('pointerover', () => this.saveButton.setStyle({ backgroundColor: '#006600' }))
-      .on('pointerout', () => this.saveButton.setStyle({ backgroundColor: '#004400' }));
+      // Name input display
+      this.nameInput = this.add.text(centerX, centerY + 70, '_', {
+        fontSize: '36px',
+        color: '#00ff00',
+        backgroundColor: '#003300',
+        padding: { x: 20, y: 10 },
+        fontFamily: 'monospace'
+      }).setOrigin(0.5);
 
-    // Skip button
-    this.skipButton = this.add.text(centerX + 80, centerY + 140, 'SKIP', {
-      fontSize: '24px',
-      color: '#ffffff',
-      backgroundColor: '#444400',
-      padding: { x: 20, y: 10 }
-    }).setOrigin(0.5)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', this.skipScore, this)
-      .on('pointerover', () => this.skipButton.setStyle({ backgroundColor: '#666600' }))
-      .on('pointerout', () => this.skipButton.setStyle({ backgroundColor: '#444400' }));
+      // Save button
+      this.saveButton = this.add.text(centerX - 80, centerY + 140, 'SAVE', {
+        fontSize: '24px',
+        color: '#ffffff',
+        backgroundColor: '#004400',
+        padding: { x: 20, y: 10 }
+      }).setOrigin(0.5)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', this.saveScore, this)
+        .on('pointerover', () => this.saveButton.setStyle({ backgroundColor: '#006600' }))
+        .on('pointerout', () => this.saveButton.setStyle({ backgroundColor: '#004400' }));
 
-    // Setup keyboard input
-    this.input.keyboard?.on('keydown', this.handleKeyInput, this);
+      // Skip button
+      this.skipButton = this.add.text(centerX + 80, centerY + 140, 'SKIP', {
+        fontSize: '24px',
+        color: '#ffffff',
+        backgroundColor: '#444400',
+        padding: { x: 20, y: 10 }
+      }).setOrigin(0.5)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', this.skipScore, this)
+        .on('pointerover', () => this.skipButton.setStyle({ backgroundColor: '#666600' }))
+        .on('pointerout', () => this.skipButton.setStyle({ backgroundColor: '#444400' }));
 
-    this.updateNameDisplay();
+      // Setup keyboard input
+      this.input.keyboard?.on('keydown', this.handleKeyInput, this);
+
+      this.updateNameDisplay();
+    } else {
+      // Not a top 10 score message with a Back button
+      this.add.text(centerX, centerY + 20, "You didn't reach the top 10.", {
+        fontSize: '24px',
+        color: '#ffffff'
+      }).setOrigin(0.5);
+
+      this.add.text(centerX, centerY + 80, 'BACK TO MENU', {
+        fontSize: '24px',
+        color: '#ffffff',
+        backgroundColor: '#444444',
+        padding: { x: 20, y: 10 }
+      }).setOrigin(0.5)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => this.scene.start('StartMenuScene'));
+    }
   }
 
   private handleKeyInput(event: KeyboardEvent) {
@@ -163,8 +189,16 @@ export class ScoreEntryScene extends Phaser.Scene {
     });
     
     // Keep only top 10 for the specific game mode
-    localStorage.setItem(leaderboardKey, JSON.stringify(scores.slice(0, 20)));
+    localStorage.setItem(leaderboardKey, JSON.stringify(scores.slice(0, 10)));
     
+    // Try to submit to Convex (non-blocking)
+    void submitScoreConvex({
+      name,
+      score: this.score,
+      time: this.gameTime,
+      mode: this.gameMode === 'wave' ? 'wave' : 'endless'
+    });
+
     // Go to start menu
     this.scene.start('StartMenuScene');
   }

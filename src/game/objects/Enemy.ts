@@ -187,6 +187,35 @@ export class ShooterEnemy extends Enemy {
   }
 }
 
+export class SplitterEnemy extends Enemy {
+  private target: Player;
+  constructor(scene: Phaser.Scene, x: number, y: number, target: Player, speedMultiplier: number = 1) {
+    const adjustedSpeed = GAME_SETTINGS.enemies.splitter.speed * speedMultiplier;
+    super(scene, x, y, 'enemy_splitter', adjustedSpeed, GAME_SETTINGS.enemies.splitter.scoreValue, GAME_SETTINGS.enemies.splitter.health);
+    this.target = target;
+  }
+
+  update() {
+    this.scene.physics.moveToObject(this, this.target, this.speed);
+  }
+}
+
+export class MiniEnemy extends Enemy {
+  private initialVelocityX: number;
+  private initialVelocityY: number;
+  constructor(scene: Phaser.Scene, x: number, y: number, target: Player, speedMultiplier: number = 1) {
+    const adjustedSpeed = GAME_SETTINGS.enemies.mini.speed * speedMultiplier;
+    super(scene, x, y, 'enemy_mini', adjustedSpeed, GAME_SETTINGS.enemies.mini.scoreValue, GAME_SETTINGS.enemies.mini.health);
+    const angle = Phaser.Math.Angle.Between(x, y, target.x, target.y);
+    this.initialVelocityX = Math.cos(angle) * this.speed;
+    this.initialVelocityY = Math.sin(angle) * this.speed;
+  }
+
+  update() {
+    this.setVelocity(this.initialVelocityX, this.initialVelocityY);
+  }
+}
+
 export class EnemySpawner {
   private scene: Phaser.Scene;
   private enemyGroup: Phaser.Physics.Arcade.Group;
@@ -223,6 +252,8 @@ export class EnemySpawner {
       enemy = new BigEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player, difficulty.enemySpeedMultiplier);
     } else if (spawnChance < difficulty.fastEnemyChance + difficulty.bigEnemyChance) {
       enemy = new FastEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player, difficulty.enemySpeedMultiplier);
+    } else if (spawnChance < (difficulty.fastEnemyChance + difficulty.bigEnemyChance + 0.08)) {
+      enemy = new SplitterEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player, difficulty.enemySpeedMultiplier);
     } else {
       enemy = new RegularEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player, difficulty.enemySpeedMultiplier);
     }
@@ -238,6 +269,7 @@ export class EnemySpawner {
     const bigCut = waveSettings.enemyTypes.big;
     const fastCut = bigCut + waveSettings.enemyTypes.fast;
     const shooterCut = fastCut + waveSettings.enemyTypes.shooter;
+    const splitterCut = shooterCut + (waveSettings.enemyTypes.splitter ?? 0);
 
     if (spawnChance < bigCut) {
       enemy = new BigEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player);
@@ -245,6 +277,8 @@ export class EnemySpawner {
       enemy = new FastEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player);
     } else if (spawnChance < shooterCut) {
       enemy = new ShooterEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player);
+    } else if (spawnChance < splitterCut) {
+      enemy = new SplitterEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player);
     } else {
       enemy = new RegularEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player);
     }
@@ -271,5 +305,142 @@ export class EnemySpawner {
       default:
         return { x: 0, y: 0 };
     }
+  }
+}
+
+// Bosses
+export abstract class Boss extends Phaser.Physics.Arcade.Sprite {
+  protected maxHealth: number
+  protected currentHealth: number
+  protected speed: number
+  protected scoreValue: number
+  protected target: Player
+
+  constructor(scene: Phaser.Scene, x: number, y: number, texture: string, target: Player, maxHealth: number, speed: number, scoreValue: number) {
+    super(scene, x, y, texture)
+    scene.add.existing(this)
+    scene.physics.add.existing(this)
+    this.maxHealth = maxHealth
+    this.currentHealth = maxHealth
+    this.speed = speed
+    this.scoreValue = scoreValue
+    this.target = target
+    this.setCollideWorldBounds(true)
+  }
+
+  takeDamage(amount: number): boolean {
+    this.currentHealth -= amount
+    return this.currentHealth <= 0
+  }
+
+  getHealthPct(): number { return Math.max(0, this.currentHealth / this.maxHealth) }
+  getScoreValue(): number { return this.scoreValue }
+}
+
+export class SentinelBoss extends Boss {
+  private phaseTimer?: Phaser.Time.TimerEvent
+  private dashCooldown = 2000
+  private shootCooldown = 800
+  private lastDash = 0
+  private lastShoot = 0
+
+  constructor(scene: Phaser.Scene, x: number, y: number, target: Player) {
+    super(scene, x, y, 'boss_sentinel', target, 300, 110, 500)
+    this.startPhases()
+  }
+
+  private startPhases() {
+    this.phaseTimer = this.scene.time.addEvent({ delay: 4000, loop: true, callback: () => {
+      // Alternate between chase and strafe phases
+      this.dashCooldown = 1500 + Math.random()*1000
+      this.shootCooldown = 600 + Math.random()*500
+    } })
+  }
+
+  update() {
+    const now = this.scene.time.now
+    const dx = this.target.x - this.x
+    const dy = this.target.y - this.y
+    const dist = Math.hypot(dx, dy) || 1
+    // Strafe around the player within mid range
+    const desired = 260
+    const towards = (dist > desired ? 1 : -1)
+    const strafeX = (-dy / dist) * this.speed * 0.8
+    const strafeY = (dx / dist) * this.speed * 0.8
+    const vx = (dx / dist) * this.speed * 0.6 * towards + strafeX
+    const vy = (dy / dist) * this.speed * 0.6 * towards + strafeY
+    this.setVelocity(vx, vy)
+
+    if (now - this.lastDash > this.dashCooldown) {
+      this.lastDash = now
+      const dashV = 280
+      this.setVelocity((dx / dist) * dashV, (dy / dist) * dashV)
+    }
+
+    if (now - this.lastShoot > this.shootCooldown) {
+      this.lastShoot = now
+      // Fire a 5-bullet fan
+      const sceneWithBullets = this.scene as Phaser.Scene & { enemyBullets?: Phaser.Physics.Arcade.Group }
+      const group = sceneWithBullets.enemyBullets
+      if (group) {
+        const base = Math.atan2(dy, dx)
+        for (let i = -2; i <= 2; i++) {
+          const angle = base + i * 0.12
+          const bullet = group.get(this.x, this.y, 'enemy_bullet') as Phaser.Physics.Arcade.Image | null
+          if (!bullet) continue
+          bullet.enableBody(true, this.x, this.y, true, true)
+          bullet.setActive(true).setVisible(true)
+          bullet.setCircle(4, 0, 0)
+          this.scene.physics.world.enable(bullet)
+          bullet.setVelocity(Math.cos(angle) * 240, Math.sin(angle) * 240)
+        }
+      }
+    }
+  }
+
+  destroy(fromScene?: boolean): void {
+    this.phaseTimer?.remove()
+    super.destroy(fromScene)
+  }
+}
+
+export class ArtilleryBoss extends Boss {
+  private salvoTimer?: Phaser.Time.TimerEvent
+  constructor(scene: Phaser.Scene, x: number, y: number, target: Player) {
+    super(scene, x, y, 'boss_artillery', target, 400, 80, 700)
+    this.startSalvos()
+  }
+  private startSalvos() {
+    this.salvoTimer = this.scene.time.addEvent({ delay: 2500, loop: true, callback: () => this.fireBarrage() })
+  }
+  private fireBarrage() {
+    const sceneWithBullets = this.scene as Phaser.Scene & { enemyBullets?: Phaser.Physics.Arcade.Group }
+    const group = sceneWithBullets.enemyBullets
+    if (!group) return
+    // Circular barrage
+    const bullets = 18
+    for (let i = 0; i < bullets; i++) {
+      const angle = (Math.PI * 2 * i) / bullets
+      const bullet = group.get(this.x, this.y, 'enemy_bullet') as Phaser.Physics.Arcade.Image | null
+      if (!bullet) continue
+      bullet.enableBody(true, this.x, this.y, true, true)
+      bullet.setActive(true).setVisible(true)
+      bullet.setCircle(4, 0, 0)
+      this.scene.physics.world.enable(bullet)
+      bullet.setVelocity(Math.cos(angle) * 180, Math.sin(angle) * 180)
+    }
+  }
+  update() {
+    // Keep distance, slowly move
+    const dx = this.target.x - this.x
+    const dy = this.target.y - this.y
+    const dist = Math.hypot(dx, dy) || 1
+    const desired = 360
+    const towards = (dist > desired ? 1 : -1)
+    this.setVelocity((dx / dist) * this.speed * towards, (dy / dist) * this.speed * towards)
+  }
+  destroy(fromScene?: boolean): void {
+    this.salvoTimer?.remove()
+    super.destroy(fromScene)
   }
 }

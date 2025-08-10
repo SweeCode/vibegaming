@@ -33,6 +33,8 @@ export class UpgradeManager {
   constructor() {
     // Initialize upgrade levels from localStorage or defaults
     this.upgradeLevels = this.loadUpgradeLevels();
+    // Kick off background remote sync
+    void this.loadFromRemote();
     
     // Base costs for first upgrade level
     this.baseCosts = {
@@ -74,6 +76,25 @@ export class UpgradeManager {
     localStorage.setItem('upgradeLevels', JSON.stringify(this.upgradeLevels));
   }
 
+  // Convex sync helpers (load if present; save on changes)
+  async loadFromRemote(): Promise<void> {
+    try {
+      const mod = await import('@/lib/convexClient');
+      const remote = await mod.loadUpgradesConvex();
+      if (remote) {
+        this.upgradeLevels = { ...remote } as UpgradeLevels;
+        this.saveUpgradeLevels();
+      }
+    } catch { /* ignore */ }
+  }
+
+  async saveToRemote(): Promise<void> {
+    try {
+      const mod = await import('@/lib/convexClient');
+      await mod.saveUpgradesConvex({ ...this.upgradeLevels });
+    } catch { /* ignore */ }
+  }
+
   getUpgradeLevels(): UpgradeLevels {
     return { ...this.upgradeLevels };
   }
@@ -106,6 +127,8 @@ export class UpgradeManager {
     const cost = this.getUpgradeCost(stat);
     this.upgradeLevels[stat]++;
     this.saveUpgradeLevels();
+    // Fire and forget
+    void this.saveToRemote();
     
     return { 
       success: true, 
@@ -168,5 +191,6 @@ export class UpgradeManager {
       bulletDamage: 0
     };
     this.saveUpgradeLevels();
+    void this.saveToRemote();
   }
 }

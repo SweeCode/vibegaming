@@ -8,8 +8,11 @@ export interface WaveSettings {
     fast: number;
     big: number;
     shooter: number;
+    splitter: number;
   };
   breakDuration: number; // Time between waves in milliseconds
+  isBoss: boolean;
+  bossType?: 'sentinel' | 'artillery';
 }
 
 export class WaveManager {
@@ -33,32 +36,41 @@ export class WaveManager {
     const spawnDelay = Math.max(1200 - this.currentWave * 80, 300); // Much faster spawning
     
     // Calculate enemy type distribution based on wave
-    let normalPercentage = Math.max(0.75 - this.currentWave * 0.045, 0.25);
-    let fastPercentage = Math.min(0.1 + this.currentWave * 0.03, 0.35);
-    let bigPercentage = Math.min(0.1 + this.currentWave * 0.02, 0.25);
-    let shooterPercentage = Math.min(0.05 + this.currentWave * 0.02, 0.25);
+    let normalPercentage = Math.max(0.70 - this.currentWave * 0.04, 0.15);
+    let fastPercentage = Math.min(0.12 + this.currentWave * 0.03, 0.35);
+    let bigPercentage = Math.min(0.10 + this.currentWave * 0.02, 0.25);
+    let shooterPercentage = Math.min(0.05 + this.currentWave * 0.015, 0.2);
+    let splitterPercentage = Math.min(0.03 + this.currentWave * 0.02, 0.2);
 
     // Normalize percentages
-    const total = normalPercentage + fastPercentage + bigPercentage + shooterPercentage;
+    const total = normalPercentage + fastPercentage + bigPercentage + shooterPercentage + splitterPercentage;
     normalPercentage /= total;
     fastPercentage /= total;
     bigPercentage /= total;
     shooterPercentage /= total;
+    splitterPercentage /= total;
 
-    // Simple wave titles
-    const title = `Wave ${this.currentWave}`;
+    // Boss every 5 waves
+    const isBoss = this.currentWave % 5 === 0;
+    const bossType: 'sentinel' | 'artillery' | undefined = isBoss ? (this.currentWave % 10 === 0 ? 'artillery' : 'sentinel') : undefined;
+
+    // Titles
+    const title = isBoss ? `BOSS ${this.currentWave / 5}` : `Wave ${this.currentWave}`;
 
     return {
       waveNumber: this.currentWave,
       title,
-      enemyCount: baseEnemyCount,
+      enemyCount: isBoss ? 0 : baseEnemyCount,
       spawnDelay,
         enemyTypes: {
           normal: normalPercentage,
           fast: fastPercentage,
           big: bigPercentage,
-          shooter: shooterPercentage
-        },      breakDuration: 3000 // Fixed 3 second break between waves
+          shooter: shooterPercentage,
+          splitter: splitterPercentage
+        },      breakDuration: 3000, // Fixed 3 second break between waves
+      isBoss,
+      bossType
     };
   }
 
@@ -90,6 +102,8 @@ export class WaveManager {
   isWaveComplete(): boolean {
     if (!this.isWaveActive) return false;
     const waveSettings = this.getCurrentWaveSettings();
+    // Boss waves are completed explicitly by the scene when the boss dies
+    if (waveSettings.isBoss) return false;
     return this.enemiesSpawned >= waveSettings.enemyCount && this.enemiesKilled >= waveSettings.enemyCount;
   }
 

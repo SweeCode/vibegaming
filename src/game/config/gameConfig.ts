@@ -14,7 +14,12 @@ export const GAME_CONFIG = {
   }
 };
 
+export const IS_DEV: boolean = process.env.NODE_ENV !== 'production';
+
 export const GAME_SETTINGS = {
+  experimental: {
+    splitterEnabled: IS_DEV
+  },
   player: {
     speed: 200,
     maxHealth: 100,
@@ -43,6 +48,20 @@ export const GAME_SETTINGS = {
       scoreValue: 50,
       spawnChance: 0.2,
       health: 3
+    },
+    splitter: {
+      // Splits into multiple minis on death
+      speed: 90,
+      scoreValue: 40,
+      spawnChance: 0.12,
+      health: 2,
+      minisOnSplit: 3
+    },
+    mini: {
+      // Spawned by splitter, no further splitting
+      speed: 220,
+      scoreValue: 8,
+      health: 1
     },
     shooter: {
       speed: 100,

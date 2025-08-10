@@ -1,4 +1,5 @@
 import * as Phaser from 'phaser';
+import { fetchTopScoresConvex } from '@/lib/convexClient';
 
 export class StartMenuScene extends Phaser.Scene {
   private startButton!: Phaser.GameObjects.Text;
@@ -13,6 +14,7 @@ export class StartMenuScene extends Phaser.Scene {
   private leaderboardHeader?: Phaser.GameObjects.Text;
   private leaderboardBg?: Phaser.GameObjects.Rectangle;
   private leaderboardMaskShape?: Phaser.GameObjects.Rectangle;
+  private leaderboardHeaderRow?: Phaser.GameObjects.Container;
   private backButton?: Phaser.GameObjects.Text;
   private classicButton?: Phaser.GameObjects.Text;
   private waveButton?: Phaser.GameObjects.Text;
@@ -252,7 +254,7 @@ export class StartMenuScene extends Phaser.Scene {
     this.showSpecificLeaderboard(this.currentLeaderboardMode);
   }
 
-  private showSpecificLeaderboard(mode: 'endless' | 'wave') {
+  private async showSpecificLeaderboard(mode: 'endless' | 'wave') {
     this.currentLeaderboardMode = mode;
 
     // Update button styles
@@ -281,63 +283,117 @@ export class StartMenuScene extends Phaser.Scene {
 
     // Get scores for the selected mode
     const leaderboardKey = mode === 'wave' ? 'leaderboard_wave' : 'leaderboard';
-    const scores = JSON.parse(localStorage.getItem(leaderboardKey) || '[]');
+    // Try online first, fallback to local
+    let scores: Array<{name?: string, score: number, time: number, createdAt?: number}> = [];
+    const online = await fetchTopScoresConvex(mode === 'wave' ? 'wave' : 'endless', 50);
+    if (online && online.length) {
+      scores = online;
+    }
+    if (!scores || scores.length === 0) {
+      scores = JSON.parse(localStorage.getItem(leaderboardKey) || '[]');
+    }
     console.log(`${mode} leaderboard data:`, scores);
 
     // Header
     if (this.leaderboardHeader) { this.leaderboardHeader.destroy(); this.leaderboardHeader = undefined; }
-    this.leaderboardHeader = this.add.text(this.scale.width / 2, this.scale.height / 2 - 100, `${mode.toUpperCase()} MODE LEADERBOARD`, {
-      fontSize: '26px', color: '#ffffff', fontStyle: 'bold'
+    this.leaderboardHeader = this.add.text(this.scale.width / 2, this.scale.height / 2 - 140, `${mode.toUpperCase()} MODE LEADERBOARD`, {
+      fontSize: '28px', color: '#ffffff', fontStyle: 'bold'
     }).setOrigin(0.5);
 
-    // Scrollable list container
+    // Panel and container
     const listX = this.scale.width / 2;
-    const listY = this.scale.height / 2;
-    this.leaderboardContainer = this.add.container(listX, listY);
-    this.leaderboardScrollY = 0;
-
-    const rowHeight = 22;
-    const fontSize = '16px';
-    const panelWidth = this.scale.width * 0.6;
-    const panelHeight = 260; // fits between buttons
+    const listY = this.scale.height / 2 + 10;
+    const rowHeight = 28;
+    const panelWidth = Math.min(this.scale.width * 0.8, 900);
+    const panelHeight = 340;
     const maxVisible = Math.floor(panelHeight / rowHeight);
 
+    if (this.leaderboardBg) { this.leaderboardBg.destroy(); this.leaderboardBg = undefined; }
+    this.leaderboardBg = this.add.rectangle(listX, listY, panelWidth, maxVisible * rowHeight + 40, 0x001133, 0.75)
+      .setOrigin(0.5)
+      .setStrokeStyle(2, 0x00ffff, 0.6);
+
+    // Column headers
+    const colRankX = -panelWidth / 2 + 40;
+    const colNameX = -panelWidth / 2 + 100;
+    const colScoreX = panelWidth / 2 - 220;
+    const colTimeX = panelWidth / 2 - 120;
+    const colDateX = panelWidth / 2 - 20;
+
+    const headerY = listY - (maxVisible * rowHeight) / 2 - 10;
+    const header = this.add.container(listX, headerY);
+    const headerBg = this.add.rectangle(0, 0, panelWidth, 30, 0x003355, 0.9)
+      .setOrigin(0.5);
+    header.add(headerBg);
+    const hdrStyle = { fontSize: '16px', color: '#aeefff' } as Phaser.Types.GameObjects.Text.TextStyle;
+    header.add(this.add.text(colRankX, 0, '#', hdrStyle).setOrigin(0, 0.5));
+    header.add(this.add.text(colNameX, 0, 'Name', hdrStyle).setOrigin(0, 0.5));
+    header.add(this.add.text(colScoreX, 0, 'Score', hdrStyle).setOrigin(0, 0.5));
+    header.add(this.add.text(colTimeX, 0, 'Time', hdrStyle).setOrigin(0, 0.5));
+    header.add(this.add.text(colDateX, 0, 'Date', hdrStyle).setOrigin(1, 0.5));
+    // Save to clear later
+    this.leaderboardHeaderRow?.destroy(true);
+    this.leaderboardHeaderRow = header;
+
+    // Scrollable rows container
+    this.leaderboardContainer = this.add.container(listX, listY - (maxVisible * rowHeight) / 2);
+    this.leaderboardScrollY = 0;
+
+    const formatTime = (secondsVal: number) => {
+      const m = Math.floor((secondsVal || 0) / 60);
+      const s = (secondsVal || 0) % 60;
+      return `${m}:${s.toString().padStart(2, '0')}`;
+    };
+
+    const rowStyle = { fontSize: '16px', color: '#ffffff' } as Phaser.Types.GameObjects.Text.TextStyle;
+
     if (scores.length === 0) {
-      const empty = this.add.text(0, 0, 'No scores yet!\nPlay a game to set your first score.', { fontSize: '18px', color: '#ffffff', align: 'center' }).setOrigin(0.5);
+      const empty = this.add.text(listX, listY, 'No scores yet!\nPlay a game to set your first score.', { fontSize: '18px', color: '#ffffff', align: 'center' })
+        .setOrigin(0.5);
       this.leaderboardContainer.add(empty);
     } else {
-      scores.forEach((entry: number | {name?: string, score: number, time: number}, index: number) => {
-        let text = '';
-        if (typeof entry === 'number') {
-          text = `${index + 1}. ${entry.toLocaleString()}`;
-        } else {
-          const name = entry.name || 'Anonymous';
-          const score = entry.score || 0;
-          const time = entry.time || 0;
-          const minutes = Math.floor(time / 60);
-          const seconds = time % 60;
-          const formattedTime = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-          text = `${index + 1}. ${name}: ${score.toLocaleString()} (${formattedTime})`;
-        }
-        const row = this.add.text(0, index * rowHeight, text, { fontSize, color: '#ffffff' }).setOrigin(0.5, 0);
-        this.leaderboardContainer?.add(row);
+      scores.forEach((entry, index) => {
+        const y = index * rowHeight;
+        const isAlt = index % 2 === 1;
+        const bg = this.add.rectangle(0, y, panelWidth, rowHeight, isAlt ? 0x002244 : 0x001a33, 0.6).setOrigin(0.5, 0);
+        this.leaderboardContainer?.add(bg);
+
+        // Rank with medal for top 3
+        const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
+        const rankText = this.add.text(colRankX, y + rowHeight / 2, `${index + 1}${medal ? ' ' + medal : ''}`, rowStyle).setOrigin(0, 0.5);
+        this.leaderboardContainer?.add(rankText);
+
+        // Name
+        const name = entry.name || 'Anonymous';
+        const nameText = this.add.text(colNameX, y + rowHeight / 2, name, rowStyle).setOrigin(0, 0.5);
+        this.leaderboardContainer?.add(nameText);
+
+        // Score
+        const scoreText = this.add.text(colScoreX, y + rowHeight / 2, (entry.score || 0).toLocaleString(), rowStyle).setOrigin(0, 0.5);
+        this.leaderboardContainer?.add(scoreText);
+
+        // Time
+        const timeText = this.add.text(colTimeX, y + rowHeight / 2, formatTime(entry.time || 0), rowStyle).setOrigin(0, 0.5);
+        this.leaderboardContainer?.add(timeText);
+
+        // Date
+        const dateStr = entry.createdAt ? new Date(entry.createdAt).toLocaleDateString() : '';
+        const dateText = this.add.text(colDateX, y + rowHeight / 2, dateStr, rowStyle).setOrigin(1, 0.5);
+        this.leaderboardContainer?.add(dateText);
       });
     }
 
-    // Mask to clip overflow and background panel behind list (do not cover controls)
+    // Mask to clip overflow
     if (this.leaderboardMaskShape) { this.leaderboardMaskShape.destroy(); this.leaderboardMaskShape = undefined; }
-    this.leaderboardMaskShape = this.add.rectangle(listX, listY, panelWidth, maxVisible * rowHeight, 0x000000, 0).setOrigin(0.5);
+    this.leaderboardMaskShape = this.add.rectangle(listX, listY + 10, panelWidth, maxVisible * rowHeight, 0x000000, 0).setOrigin(0.5);
     this.leaderboardContainer.setMask(this.leaderboardMaskShape.createGeometryMask());
-
-    if (this.leaderboardBg) { this.leaderboardBg.destroy(); this.leaderboardBg = undefined; }
-    this.leaderboardBg = this.add.rectangle(listX, listY, panelWidth, maxVisible * rowHeight + 20, 0x000044, 0.6).setOrigin(0.5);
 
     // Scroll handlers
     this.input.on('wheel', (_pointer: Phaser.Input.Pointer, _go: unknown, _dx: number, dy: number) => {
       const totalHeight = (scores.length) * rowHeight;
       const limit = Math.max(0, totalHeight - maxVisible * rowHeight);
       this.leaderboardScrollY = Phaser.Math.Clamp(this.leaderboardScrollY + dy, -limit, 0);
-      this.leaderboardContainer?.setY(listY + this.leaderboardScrollY);
+      this.leaderboardContainer?.setY(listY - (maxVisible * rowHeight) / 2 + this.leaderboardScrollY);
     });
 
     this.input.keyboard?.on('keydown', (e: KeyboardEvent) => {
@@ -346,11 +402,10 @@ export class StartMenuScene extends Phaser.Scene {
       const limit = Math.max(0, totalHeight - maxVisible * rowHeight);
       if (e.key === 'ArrowDown' || e.key === 'PageDown') {
         this.leaderboardScrollY = Phaser.Math.Clamp(this.leaderboardScrollY + step, -limit, 0);
-        this.leaderboardContainer?.setY(listY + this.leaderboardScrollY);
       } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
         this.leaderboardScrollY = Phaser.Math.Clamp(this.leaderboardScrollY - step, -limit, 0);
-        this.leaderboardContainer?.setY(listY + this.leaderboardScrollY);
       }
+      this.leaderboardContainer?.setY(listY - (maxVisible * rowHeight) / 2 + this.leaderboardScrollY);
     });
 
     // Back button (only create once)
@@ -386,6 +441,7 @@ export class StartMenuScene extends Phaser.Scene {
     if (this.leaderboardHeader) { this.leaderboardHeader.destroy(); this.leaderboardHeader = undefined; }
     if (this.leaderboardBg) { this.leaderboardBg.destroy(); this.leaderboardBg = undefined; }
     if (this.leaderboardMaskShape) { this.leaderboardMaskShape.destroy(); this.leaderboardMaskShape = undefined; }
+    if (this.leaderboardHeaderRow) { this.leaderboardHeaderRow.destroy(true); this.leaderboardHeaderRow = undefined; }
     if (this.leaderboardTitle) { this.leaderboardTitle.destroy(); this.leaderboardTitle = undefined; }
 
     if (this.backButton) { this.backButton.destroy(); this.backButton = undefined; }
@@ -405,11 +461,12 @@ export class StartMenuScene extends Phaser.Scene {
   }
 
   private resetLeaderboard() {
-    // Clear leaderboard data
+    // Clear leaderboard data for both modes
     localStorage.removeItem('leaderboard');
+    localStorage.removeItem('leaderboard_wave');
     
     // Show confirmation message
-    const confirmText = this.add.text(this.scale.width / 2, this.scale.height - 100, 'Leaderboard Reset!', {
+    const confirmText = this.add.text(this.scale.width / 2, this.scale.height - 100, 'Leaderboards Reset!', {
       fontSize: '32px',
       color: '#ff0000',
       fontStyle: 'bold'
