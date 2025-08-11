@@ -22,6 +22,7 @@ export class WaveScene extends Phaser.Scene {
   private bossHealthText?: Phaser.GameObjects.Text;
   private bossAddTimer?: Phaser.Time.TimerEvent;
   private bossBulletOverlap?: Phaser.Physics.Arcade.Collider;
+  private bossPlayerCollider?: Phaser.Physics.Arcade.Collider;
   // Prevent multiple damage applications from a single collision/frame
   private bossHitCooldownUntil: number = 0;
   private score = 0;
@@ -49,8 +50,7 @@ export class WaveScene extends Phaser.Scene {
       this.breakTimer.destroy();
       this.breakTimer = undefined;
     }
-    this.bossBulletOverlap?.destroy();
-    this.bossBulletOverlap = undefined;
+    this.cleanupBoss();
   }
 
   preload() {
@@ -295,6 +295,8 @@ export class WaveScene extends Phaser.Scene {
     this.enemies.clear(true, true);
     if (this.spawnTimer) { this.spawnTimer.destroy(); this.spawnTimer = undefined; }
     this.bossHitCooldownUntil = 0;
+    // Ensure any existing boss is fully cleaned before spawning a new one
+    this.cleanupBoss();
     const x = this.scale.width / 2;
     const y = this.scale.height / 2 - 150;
     // Boss constructors already add themselves to the scene and physics
@@ -314,7 +316,7 @@ export class WaveScene extends Phaser.Scene {
       undefined,
       this
     );
-    this.physics.add.collider(this.player, this.boss, this.handlePlayerBossCollision as unknown as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback, undefined, this);
+    this.bossPlayerCollider = this.physics.add.collider(this.player, this.boss, this.handlePlayerBossCollision as unknown as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback, undefined, this);
     // Ensure the boss body is immovable relative to player collision too
     ;(this.boss.body as Phaser.Physics.Arcade.Body).immovable = true
     this.createBossHealthUI();
@@ -429,15 +431,7 @@ export class WaveScene extends Phaser.Scene {
     this.updateBossHealthUI();
     if (dead) {
       this.score += (this.boss as Boss).getScoreValue();
-      (this.boss as Boss).destroy();
-      this.boss = undefined;
-      // Remove boss bullet overlap collider and clear any remaining adds
-      this.bossBulletOverlap?.destroy();
-      this.bossBulletOverlap = undefined;
-      this.enemies.clear(true, true);
-      this.bossHealthBar?.destroy(); this.bossHealthBar = undefined;
-      this.bossHealthText?.destroy(); this.bossHealthText = undefined;
-      this.stopBossAdds();
+      this.cleanupBoss();
       this.cameras.main.shake(200, 0.01);
       this.waveManager.startBreak();
       this.showBreakNotification();
@@ -446,6 +440,24 @@ export class WaveScene extends Phaser.Scene {
         this.startNextWave();
       });
     }
+  }
+
+  private cleanupBoss() {
+    // Destroy boss-specific colliders
+    if (this.bossBulletOverlap) { this.bossBulletOverlap.destroy(); this.bossBulletOverlap = undefined; }
+    if (this.bossPlayerCollider) { this.bossPlayerCollider.destroy(); this.bossPlayerCollider = undefined; }
+    // Stop boss add spawns
+    this.stopBossAdds();
+    // Clear any adds still alive
+    if (this.enemies) this.enemies.clear(true, true);
+    // Remove boss UI
+    if (this.bossHealthBar) { this.bossHealthBar.destroy(); this.bossHealthBar = undefined; }
+    if (this.bossHealthText) { this.bossHealthText.destroy(); this.bossHealthText = undefined; }
+    // Destroy boss instance
+    if (this.boss && this.boss.active) {
+      (this.boss as Boss).destroy();
+    }
+    this.boss = undefined;
   }
 
   private handlePlayerBossCollision(_playerObj: Phaser.GameObjects.GameObject) {
@@ -778,12 +790,13 @@ export class WaveScene extends Phaser.Scene {
     
     if (this.spawnTimer) this.spawnTimer.destroy();
     if (this.breakTimer) this.breakTimer.destroy();
-    this.bossBulletOverlap?.destroy();
-    this.bossBulletOverlap = undefined;
-    if (this.boss) {
-      (this.boss as Boss).destroy();
-      this.boss = undefined;
+    // Clear enemy bullets as well
+    if (this['enemyBullets']) {
+      const group = (this as unknown as Phaser.Scene & { enemyBullets?: Phaser.Physics.Arcade.Group }).enemyBullets;
+      group?.clear(true, true);
     }
+    // Fully cleanup any existing boss
+    this.cleanupBoss();
     
     this.physics.resume();
     this.startFirstWave();
