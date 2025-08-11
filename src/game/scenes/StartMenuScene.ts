@@ -1,4 +1,5 @@
 import * as Phaser from 'phaser';
+import { IS_DEV } from '../config/gameConfig';
 import { fetchTopScoresConvex } from '@/lib/convexClient';
 
 export class StartMenuScene extends Phaser.Scene {
@@ -22,6 +23,12 @@ export class StartMenuScene extends Phaser.Scene {
   private showingLeaderboard = false;
   private showingModes = false;
   private currentLeaderboardMode: 'endless' | 'wave' = 'endless';
+  // Background FX
+  private bgStarsFar?: Phaser.GameObjects.Group;
+  private bgStarsNear?: Phaser.GameObjects.Group;
+  private bgEnemies?: Phaser.GameObjects.Group;
+  private bgTimers: Phaser.Time.TimerEvent[] = [];
+  private bgUpdateActive = false;
 
   constructor() {
     super({ key: 'StartMenuScene' });
@@ -35,19 +42,21 @@ export class StartMenuScene extends Phaser.Scene {
   }
 
   create() {
-    console.log('StartMenuScene created'); // Debug log
+    if (IS_DEV) console.log('StartMenuScene created'); // Debug log
     const centerX = this.scale.width / 2;
     const centerY = this.scale.height / 2;
 
-    // Create Swedish-themed background
-    this.createSwedishBackground();
+    // Create arcade shooter themed background
+    this.createShooterBackground();
 
     // Game Title
-    this.titleText = this.add.text(centerX, centerY - 200, 'Welcome!', {
-      fontSize: '64px',
+    this.titleText = this.add.text(centerX, centerY - 200, 'BOSS RUSH', {
+      fontSize: '72px',
       color: '#ffffff',
       fontStyle: 'bold'
     }).setOrigin(0.5);
+    this.titleText.setShadow(0, 0, '#ff3366', 24, true, true);
+    this.tweens.add({ targets: this.titleText, scale: { from: 1.0, to: 1.06 }, yoyo: true, duration: 1200, repeat: -1, ease: 'Sine.InOut' });
 
     // Primary Game Modes Button
     this.startButton = this.add.text(centerX, centerY - 80, 'GAME MODES', {
@@ -82,7 +91,7 @@ export class StartMenuScene extends Phaser.Scene {
     }).setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
-        console.log('Leaderboard button clicked'); // Debug log
+        if (IS_DEV) console.log('Leaderboard button clicked'); // Debug log
         this.showLeaderboard();
       }, this)
       .on('pointerover', () => this.leaderboardButton.setStyle({ backgroundColor: '#006666' }))
@@ -96,75 +105,107 @@ export class StartMenuScene extends Phaser.Scene {
       color: '#666666'
     }).setOrigin(0.5);
 
-    // Add some decorative elements
-    this.createStars();
+    // Add scanline overlay
+    this.createScanlines();
     
     // Setup keyboard shortcuts
     this.setupKeyboardShortcuts();
+
+    // Ensure WebAudio context resumes only after a user gesture to avoid browser warnings
+    this.setupAudioUnlock();
   }
 
-  private createSwedishBackground() {
-    // Swedish flag colors: blue (#006AA7) and yellow (#FECC00)
-    const blueColor = 0x006AA7;
-    const yellowColor = 0xFECC00;
-    
-    // Create base blue background
-    this.add.rectangle(0, 0, this.scale.width, this.scale.height, blueColor).setOrigin(0, 0);
-    
-    // Add Swedish flag cross pattern (simplified and artistic)
-    const crossWidth = 40;
+  private createShooterBackground() {
+    const w = this.scale.width, h = this.scale.height;
+    // Dark gradient-like fill
+    const bg = this.add.rectangle(0, 0, w, h, 0x0a0a1a).setOrigin(0, 0);
+    bg.setFillStyle(0x0a0a1a, 1);
+
+    this.buildBackgroundTextures();
+
+    // Parallax stars
+    this.bgStarsFar = this.add.group();
+    this.bgStarsNear = this.add.group();
+    for (let i = 0; i < 140; i++) {
+      const s = this.add.image(Phaser.Math.Between(0, w), Phaser.Math.Between(0, h), 'star_small').setAlpha(0.6);
+      this.bgStarsFar.add(s);
+    }
+    for (let i = 0; i < 80; i++) {
+      const s = this.add.image(Phaser.Math.Between(0, w), Phaser.Math.Between(0, h), 'star_big').setAlpha(0.9);
+      this.bgStarsNear.add(s);
+    }
+
+    // Background enemies
+    this.bgEnemies = this.add.group();
+    for (let i = 0; i < 10; i++) this.spawnBgEnemy();
+
+    // Flash indicator
+    const flashTimer = this.time.addEvent({ delay: 6500, loop: true, callback: () => this.bossFlash() });
+    this.bgTimers.push(flashTimer);
+    this.bgUpdateActive = true;
+  }
+
+  private buildBackgroundTextures() {
+    // Stars
+    const s1 = this.make.graphics({}, false);
+    s1.fillStyle(0xffffff, 1).fillCircle(2, 2, 2);
+    s1.generateTexture('star_small', 4, 4); s1.destroy();
+    const s2 = this.make.graphics({}, false);
+    s2.fillStyle(0xffffff, 1).fillCircle(3, 3, 3);
+    s2.generateTexture('star_big', 6, 6); s2.destroy();
+
+    // Enemy triangle
+    const tri = this.make.graphics({}, false);
+    tri.fillStyle(0x33ffaa, 0.9);
+    tri.beginPath(); tri.moveTo(12, 0); tri.lineTo(24, 24); tri.lineTo(0, 24); tri.closePath(); tri.fillPath();
+    tri.generateTexture('bg_enemy_tri', 24, 24); tri.destroy();
+
+    // Boss silhouette
+    const boss = this.make.graphics({}, false);
+    boss.fillStyle(0xff3366, 0.7);
+    boss.fillRoundedRect(0, 0, 140, 140, 18);
+    boss.fillStyle(0x000000, 0.25);
+    boss.fillCircle(40, 50, 8); boss.fillCircle(100, 50, 8);
+    boss.generateTexture('bg_boss_sil', 140, 140); boss.destroy();
+  }
+
+  private spawnBgEnemy() {
+    if (!this.bgEnemies) return;
+    const w = this.scale.width, h = this.scale.height;
+    const x = Phaser.Math.Between(-40, w + 40);
+    const y = Phaser.Math.Between(-40, h + 40);
+    const s = this.add.image(x, y, 'bg_enemy_tri').setAlpha(0.4);
+    this.bgEnemies.add(s);
+    const dir = new Phaser.Math.Vector2(Phaser.Math.FloatBetween(-1, 1), Phaser.Math.FloatBetween(-1, 1)).normalize();
+    const speed = Phaser.Math.Between(8, 18);
+    this.tweens.add({ targets: s, angle: Phaser.Math.Between(-180, 180), duration: 4000, repeat: -1, yoyo: true, ease: 'Sine.InOut' });
+    const t = this.time.addEvent({ delay: 16, loop: true, callback: () => {
+      s.x += dir.x * speed * (16/1000);
+      s.y += dir.y * speed * (16/1000);
+      if (s.x < -60) s.x = w + 60; if (s.x > w + 60) s.x = -60;
+      if (s.y < -60) s.y = h + 60; if (s.y > h + 60) s.y = -60;
+    }});
+    this.bgTimers.push(t);
+  }
+
+  private bossFlash() {
     const centerX = this.scale.width / 2;
     const centerY = this.scale.height / 2;
-    
-    // Vertical stripe (slightly off-center like Swedish flag)
-    const verticalX = centerX - this.scale.width * 0.1;
-    this.add.rectangle(verticalX, 0, crossWidth, this.scale.height, yellowColor).setOrigin(0.5, 0).setAlpha(0.3);
-    
-    // Horizontal stripe
-    this.add.rectangle(0, centerY, this.scale.width, crossWidth, yellowColor).setOrigin(0, 0.5).setAlpha(0.3);
-    
-    // Add some Nordic-style decorative elements
-    this.createNordicPatterns();
+    const img = this.add.image(centerX, centerY - 60, 'bg_boss_sil').setAlpha(0).setScale(0.6);
+    const txt = this.add.text(centerX, centerY + 40, 'WARNING: BOSS ENCOUNTER', { fontSize: '32px', color: '#ff3366', fontStyle: 'bold' }).setOrigin(0.5).setAlpha(0);
+    this.cameras.main.shake(200, 0.01);
+    this.tweens.add({ targets: [img, txt], alpha: { from: 0, to: 1 }, duration: 220, yoyo: true, onComplete: () => { img.destroy(); txt.destroy(); } });
   }
 
-  private createNordicPatterns() {
-    // Add subtle Nordic-inspired geometric patterns
-    const patternColor = 0xFFFFFF;
-    const alpha = 0.1;
-    
-    // Create diamond patterns in corners
-    for (let corner = 0; corner < 4; corner++) {
-      const x = corner < 2 ? 100 : this.scale.width - 100;
-      const y = corner % 2 === 0 ? 100 : this.scale.height - 100;
-      
-      // Small diamond pattern
-      for (let i = 0; i < 3; i++) {
-        const size = 20 + i * 10;
-        const diamond = this.add.graphics();
-        diamond.lineStyle(2, patternColor, alpha);
-        diamond.strokeRect(x - size/2, y - size/2, size, size);
-        diamond.setRotation(Math.PI / 4); // 45 degree rotation for diamond
-      }
-    }
-  }
-
-  private createStars() {
-    // Add some background stars for decoration
-    for (let i = 0; i < 100; i++) {
-      const x = Phaser.Math.Between(0, this.scale.width);
-      const y = Phaser.Math.Between(0, this.scale.height);
-      const star = this.add.circle(x, y, Phaser.Math.Between(1, 3), 0xffffff, 0.8);
-      
-      // Add twinkling effect
-      this.tweens.add({
-        targets: star,
-        alpha: { from: 0.2, to: 1 },
-        duration: Phaser.Math.Between(1000, 3000),
-        yoyo: true,
-        repeat: -1,
-        delay: Phaser.Math.Between(0, 2000)
-      });
-    }
+  private createScanlines() {
+    const w = this.scale.width, h = this.scale.height;
+    const g = this.make.graphics({}, false);
+    g.fillStyle(0x000000, 0.12);
+    for (let y = 0; y < h; y += 4) g.fillRect(0, y, w, 2);
+    g.generateTexture('scanlines', Math.max(2, Math.floor(w)), Math.max(2, Math.floor(h)));
+    g.destroy();
+    const sl = this.add.image(0, 0, 'scanlines').setOrigin(0, 0).setAlpha(0.3);
+    this.tweens.add({ targets: sl, alpha: { from: 0.2, to: 0.35 }, duration: 1800, yoyo: true, repeat: -1 });
   }
 
   private startGame() {
@@ -292,7 +333,7 @@ export class StartMenuScene extends Phaser.Scene {
     if (!scores || scores.length === 0) {
       scores = JSON.parse(localStorage.getItem(leaderboardKey) || '[]');
     }
-    console.log(`${mode} leaderboard data:`, scores);
+    if (IS_DEV) console.log(`${mode} leaderboard data:`, scores);
 
     // Header
     if (this.leaderboardHeader) { this.leaderboardHeader.destroy(); this.leaderboardHeader = undefined; }
@@ -478,6 +519,20 @@ export class StartMenuScene extends Phaser.Scene {
     });
   }
 
+  private setupAudioUnlock() {
+    const tryUnlock = () => {
+      try {
+        if (this.sound.locked) this.sound.unlock();
+        const ctx = this.sound.context as (AudioContext | undefined);
+        if (ctx && ctx.state === 'suspended') void ctx.resume();
+      } catch {}
+    };
+    if (this.sound.locked || (this.sound.context && (this.sound.context as AudioContext).state !== 'running')) {
+      this.input.once('pointerdown', tryUnlock);
+      this.input.keyboard?.once('keydown', tryUnlock as unknown as (e: KeyboardEvent) => void);
+    }
+  }
+
   private showGameModes() {
     if (this.showingModes) return;
     this.showingModes = true;
@@ -538,5 +593,24 @@ export class StartMenuScene extends Phaser.Scene {
     if (this.classicButton) { this.classicButton.destroy(); this.classicButton = undefined; }
     if (this.waveButton) { this.waveButton.destroy(); this.waveButton = undefined; }
     if (this.modesBackButton) { this.modesBackButton.destroy(); this.modesBackButton = undefined; }
+  }
+
+  update(_time: number, delta: number) {
+    if (!this.bgUpdateActive) return;
+    const w = this.scale.width, h = this.scale.height;
+    const df = (delta / 1000);
+    const moveAndWrap = (img: Phaser.GameObjects.Image, speed: number) => {
+      img.y += speed * df;
+      if (img.y > h) img.y = -8, img.x = Phaser.Math.Between(0, w);
+    };
+    this.bgStarsFar?.getChildren().forEach(c => moveAndWrap(c as Phaser.GameObjects.Image, 18));
+    this.bgStarsNear?.getChildren().forEach(c => moveAndWrap(c as Phaser.GameObjects.Image, 36));
+  }
+
+  shutdown() {
+    // Clean background timers
+    for (const t of this.bgTimers) t.remove(false);
+    this.bgTimers = [];
+    this.bgUpdateActive = false;
   }
 }

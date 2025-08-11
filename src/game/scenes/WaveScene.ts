@@ -1,4 +1,5 @@
 import * as Phaser from 'phaser';
+import { IS_DEV } from '../config/gameConfig';
 import { GAME_SETTINGS } from '../config/gameConfig';
 import { Player } from '../objects/Player';
 import { Enemy, EnemySpawner, MiniEnemy, Boss, SentinelBoss, ArtilleryBoss } from '../objects/Enemy';
@@ -35,6 +36,11 @@ export class WaveScene extends Phaser.Scene {
   private breakTimer?: Phaser.Time.TimerEvent;
   private waveText?: Phaser.GameObjects.Text;
   private breakText?: Phaser.GameObjects.Text;
+  // Boss intro UI/timers
+  private bossIntroActive: boolean = false;
+  private bossIntroText?: Phaser.GameObjects.Text;
+  private bossCountdownText?: Phaser.GameObjects.Text;
+  private bossIntroTimers: Phaser.Time.TimerEvent[] = [];
 
   constructor() {
     super({ key: 'WaveScene' });
@@ -51,6 +57,7 @@ export class WaveScene extends Phaser.Scene {
       this.breakTimer = undefined;
     }
     this.cleanupBoss();
+    this.cleanupBossIntro();
   }
 
   preload() {
@@ -212,18 +219,19 @@ export class WaveScene extends Phaser.Scene {
 
   private startFirstWave() {
     this.waveManager.startWave();
-    this.showWaveNotification();
     const settings = this.waveManager.getCurrentWaveSettings();
     if (settings.isBoss) {
-      this.spawnBoss(settings.bossType || 'sentinel');
+      // On all boss waves, show the boss intro instead of the normal wave notification
+      this.startBossIntro(settings.bossType || 'sentinel');
     } else {
+      this.showWaveNotification();
       this.setupSpawnTimer();
     }
   }
 
   private setupSpawnTimer() {
     const waveSettings = this.waveManager.getCurrentWaveSettings();
-    console.log(`Setting up spawn timer for wave ${waveSettings.waveNumber}: ${waveSettings.enemyCount} enemies, ${waveSettings.spawnDelay}ms delay`);
+    if (IS_DEV) console.log(`Setting up spawn timer for wave ${waveSettings.waveNumber}: ${waveSettings.enemyCount} enemies, ${waveSettings.spawnDelay}ms delay`);
     
     if (this.spawnTimer) {
       this.spawnTimer.destroy();
@@ -239,12 +247,12 @@ export class WaveScene extends Phaser.Scene {
 
   private spawnEnemyWithWave() {
     if (!this.waveManager.canSpawnEnemy()) {
-      console.log('Cannot spawn enemy - wave complete or inactive');
+      if (IS_DEV) console.log('Cannot spawn enemy - wave complete or inactive');
       return;
     }
 
     const waveSettings = this.waveManager.getCurrentWaveSettings();
-    console.log(`Spawning enemy for wave ${waveSettings.waveNumber}`);
+    if (IS_DEV) console.log(`Spawning enemy for wave ${waveSettings.waveNumber}`);
     
     // Use wave-based enemy spawning
     this.enemySpawner.spawnWithWave(waveSettings);
@@ -260,11 +268,11 @@ export class WaveScene extends Phaser.Scene {
     const activeEnemies = this.enemies.countActive();
     
     // Debug logging
-    console.log(`Wave ${this.waveManager.getCurrentWave()}: Spawned ${waveProgress.spawned}/${waveProgress.total}, Killed ${waveProgress.killed}/${waveProgress.total}, Active: ${activeEnemies}`);
+    if (IS_DEV) console.log(`Wave ${this.waveManager.getCurrentWave()}: Spawned ${waveProgress.spawned}/${waveProgress.total}, Killed ${waveProgress.killed}/${waveProgress.total}, Active: ${activeEnemies}`);
 
     const bossActive = !!this.boss && this.boss.active;
     if (!bossActive && this.waveManager.isWaveComplete() && activeEnemies === 0) {
-      console.log('Wave completed! Starting break...');
+      if (IS_DEV) console.log('Wave completed! Starting break...');
       // Wave completed, start break
       this.waveManager.startBreak();
       this.showBreakNotification();
@@ -277,18 +285,108 @@ export class WaveScene extends Phaser.Scene {
   }
 
   private startNextWave() {
-    console.log('Starting next wave...');
+    if (IS_DEV) console.log('Starting next wave...');
     this.waveManager.endBreak();
     this.waveManager.startWave();
-    console.log(`Now on wave ${this.waveManager.getCurrentWave()}`);
-    this.showWaveNotification();
+    if (IS_DEV) console.log(`Now on wave ${this.waveManager.getCurrentWave()}`);
     const settings = this.waveManager.getCurrentWaveSettings();
     if (settings.isBoss) {
-      this.spawnBoss(settings.bossType || 'sentinel');
+      // On all boss waves, show the boss intro instead of the normal wave notification
+      this.startBossIntro(settings.bossType || 'sentinel');
     } else {
+      this.showWaveNotification();
       this.setupSpawnTimer();
     }
     this.hideBreakNotification();
+  }
+
+  private startBossIntro(type: 'sentinel' | 'artillery') {
+    if (this.bossIntroActive) return;
+    this.bossIntroActive = true;
+    this.cleanupBossIntro();
+
+    // Compose message
+    const waveNum = this.waveManager.getCurrentWave();
+    const centerX = this.scale.width / 2;
+    const centerY = this.scale.height / 2;
+    const bossName = type === 'artillery' ? 'ARTILLERY' : 'SENTINEL';
+    const message = `WARNING: ${bossName} BOSS INCOMING`;
+
+    // Create intro text with typewriter effect
+    this.bossIntroText = this.add.text(centerX, centerY - 40, '', {
+      fontSize: '36px',
+      color: '#ff3366',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    let idx = 0;
+    const typeTimer = this.time.addEvent({
+      delay: 35,
+      loop: true,
+      callback: () => {
+        if (!this.bossIntroText) return;
+        idx++;
+        this.bossIntroText.setText(message.substring(0, idx));
+        // Occasional light shake during typing
+        if (Math.random() < 0.12) this.cameras.main.shake(80, 0.003);
+        if (idx >= message.length) {
+          typeTimer.remove(false);
+          // Start countdown after brief pause
+          const delay = this.time.delayedCall(350, () => this.runBossCountdown(type), [] as unknown as any, this);
+          this.bossIntroTimers.push(delay);
+        }
+      }
+    });
+    this.bossIntroTimers.push(typeTimer);
+  }
+
+  private runBossCountdown(type: 'sentinel' | 'artillery') {
+    const centerX = this.scale.width / 2;
+    const centerY = this.scale.height / 2 + 20;
+    this.bossCountdownText = this.add.text(centerX, centerY, '', {
+      fontSize: '64px',
+      color: '#ffffff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    const numbers = ['3', '2', '1'];
+    let i = 0;
+    const showNext = () => {
+      if (!this.bossCountdownText) return;
+      this.bossCountdownText.setScale(0.5).setAlpha(0.0);
+      this.bossCountdownText.setText(numbers[i]);
+      this.tweens.add({
+        targets: this.bossCountdownText,
+        alpha: { from: 0, to: 1 },
+        scale: { from: 0.5, to: 1.1 },
+        duration: 180,
+        ease: 'Back.Out'
+      });
+      this.cameras.main.shake(120, 0.008);
+      i++;
+      if (i < numbers.length) {
+        const t = this.time.delayedCall(420, showNext);
+        this.bossIntroTimers.push(t);
+      } else {
+        const endT = this.time.delayedCall(450, () => {
+          this.cleanupBossIntro();
+          this.spawnBoss(type);
+          this.bossIntroActive = false;
+        });
+        this.bossIntroTimers.push(endT);
+      }
+    };
+    showNext();
+  }
+
+  private cleanupBossIntro() {
+    for (const t of this.bossIntroTimers) {
+      t.remove(false);
+    }
+    this.bossIntroTimers = [];
+    this.bossIntroActive = false;
+    if (this.bossIntroText) { this.bossIntroText.destroy(); this.bossIntroText = undefined; }
+    if (this.bossCountdownText) { this.bossCountdownText.destroy(); this.bossCountdownText = undefined; }
   }
 
   private spawnBoss(type: 'sentinel' | 'artillery') {
@@ -427,7 +525,7 @@ export class WaveScene extends Phaser.Scene {
     const dead = (this.boss as Boss).takeDamage(dmg);
     const after = (this.boss as unknown as { getCurrentHealth?: () => number }).getCurrentHealth?.();
     // eslint-disable-next-line no-console
-    console.log('Boss hit', { dmg, before, after, dead });
+    if (IS_DEV) console.log('Boss hit', { dmg, before, after, dead });
     this.updateBossHealthUI();
     if (dead) {
       this.score += (this.boss as Boss).getScoreValue();
@@ -464,7 +562,10 @@ export class WaveScene extends Phaser.Scene {
     if (!this.boss) return;
     // Damage player on contact and slight knockback feeling via camera shake
     this.cameras.main.shake(100, 0.006);
-    const isDead = this.player.takeDamage(GAME_SETTINGS.player.damagePerHit * 2);
+    // Scale boss contact damage by wave number to increase lethality later
+    const wave = this.waveManager.getCurrentWave();
+    const scale = 1 + Math.max(0, wave - 5) * 0.15; // +15% per wave after 5
+    const isDead = this.player.takeDamage(Math.floor(GAME_SETTINGS.player.damagePerHit * 2 * scale));
     this.gameUI.updateHealthBar(this.player.getHealthPercentage());
     if (isDead) this.handleGameOver();
   }
@@ -580,7 +681,7 @@ export class WaveScene extends Phaser.Scene {
         }
       }
       this.waveManager.onEnemyKilled();
-      console.log(`Enemy killed! Wave progress: ${this.waveManager.getWaveProgress().killed}/${this.waveManager.getWaveProgress().total}`);
+      if (IS_DEV) console.log(`Enemy killed! Wave progress: ${this.waveManager.getWaveProgress().killed}/${this.waveManager.getWaveProgress().total}`);
       this.gameUI.updateScore(this.score);
     }
   }
@@ -609,7 +710,7 @@ export class WaveScene extends Phaser.Scene {
     
     // Count this as an enemy killed for wave progression
     this.waveManager.onEnemyKilled();
-    console.log(`Enemy destroyed by collision! Wave progress: ${this.waveManager.getWaveProgress().killed}/${this.waveManager.getWaveProgress().total}`);
+    if (IS_DEV) console.log(`Enemy destroyed by collision! Wave progress: ${this.waveManager.getWaveProgress().killed}/${this.waveManager.getWaveProgress().total}`);
     
     const isDead = this.player.takeDamage(GAME_SETTINGS.player.damagePerHit);
     this.gameUI.updateHealthBar(this.player.getHealthPercentage());
@@ -624,8 +725,19 @@ export class WaveScene extends Phaser.Scene {
     if (!bulletSprite.active) return;
     bulletSprite.setActive(false).setVisible(false);
 
-    const damage = Math.floor(GAME_SETTINGS.player.maxHealth * GAME_SETTINGS.enemies.shooter.bulletDamagePct);
-    const isDead = this.player.takeDamage(damage);
+    const fromBoss = (bulletSprite as any).getData?.('fromBoss') === true;
+    const baseDamage = Math.floor(GAME_SETTINGS.player.maxHealth * GAME_SETTINGS.enemies.shooter.bulletDamagePct);
+    if (fromBoss) {
+      // Boss bullets do more damage as waves progress
+      const wave = this.waveManager.getCurrentWave();
+      const scale = 1 + Math.max(0, wave - 5) * 0.1; // +10% per wave after 5
+      const isDead = this.player.takeDamage(Math.floor(baseDamage * scale));
+      this.gameUI.updateHealthBar(this.player.getHealthPercentage());
+      if (isDead) this.handleGameOver();
+      return;
+    }
+    // Regular enemy bullet damage remains static
+    const isDead = this.player.takeDamage(baseDamage);
     this.gameUI.updateHealthBar(this.player.getHealthPercentage());
     if (isDead) this.handleGameOver();
   }
@@ -739,7 +851,7 @@ export class WaveScene extends Phaser.Scene {
           this.score += enemySprite.getScoreValue();
           this.gameUI.updateScore(this.score);
           this.waveManager.onEnemyKilled();
-          console.log(`Enemy went off-screen! Wave progress: ${this.waveManager.getWaveProgress().killed}/${this.waveManager.getWaveProgress().total}`);
+          if (IS_DEV) console.log(`Enemy went off-screen! Wave progress: ${this.waveManager.getWaveProgress().killed}/${this.waveManager.getWaveProgress().total}`);
         }
         enemySprite.destroy();
       }

@@ -388,7 +388,8 @@ export class SentinelBoss extends Boss {
       const group = sceneWithBullets.enemyBullets
       if (group) {
         const base = Math.atan2(dy, dx)
-        for (let i = -2; i <= 2; i++) {
+        // 7-shot volley instead of 5
+        for (let i = -3; i <= 3; i++) {
           const angle = base + i * 0.12
           const bullet = group.get(this.x, this.y, 'enemy_bullet') as Phaser.Physics.Arcade.Image | null
           if (!bullet) continue
@@ -396,6 +397,7 @@ export class SentinelBoss extends Boss {
           bullet.setActive(true).setVisible(true)
           bullet.setCircle(4, 0, 0)
           this.scene.physics.world.enable(bullet)
+          ;(bullet as any).setData?.('fromBoss', true)
           bullet.setVelocity(Math.cos(angle) * 240, Math.sin(angle) * 240)
         }
       }
@@ -411,10 +413,12 @@ export class SentinelBoss extends Boss {
 export class ArtilleryBoss extends Boss {
   private salvoTimer?: Phaser.Time.TimerEvent
   constructor(scene: Phaser.Scene, x: number, y: number, target: Player) {
-    super(scene, x, y, 'boss_artillery', target, 400, 80, 700)
+    super(scene, x, y, 'boss_artillery', target, 50, 80, 700)
     this.startSalvos()
   }
   private startSalvos() {
+    // Fire immediately, then on a fixed cadence
+    this.fireBarrage()
     this.salvoTimer = this.scene.time.addEvent({ delay: 2500, loop: true, callback: () => this.fireBarrage() })
   }
   private fireBarrage() {
@@ -422,7 +426,7 @@ export class ArtilleryBoss extends Boss {
     const group = sceneWithBullets.enemyBullets
     if (!group) return
     // Circular barrage
-    const bullets = 18
+    const bullets = 36 // doubled shot count
     for (let i = 0; i < bullets; i++) {
       const angle = (Math.PI * 2 * i) / bullets
       const bullet = group.get(this.x, this.y, 'enemy_bullet') as Phaser.Physics.Arcade.Image | null
@@ -431,17 +435,18 @@ export class ArtilleryBoss extends Boss {
       bullet.setActive(true).setVisible(true)
       bullet.setCircle(4, 0, 0)
       this.scene.physics.world.enable(bullet)
+      ;(bullet as any).setData?.('fromBoss', true)
       bullet.setVelocity(Math.cos(angle) * 180, Math.sin(angle) * 180)
     }
   }
   update() {
-    // Keep distance, slowly move
+    // Slow homing toward the player
     const dx = this.target.x - this.x
     const dy = this.target.y - this.y
     const dist = Math.hypot(dx, dy) || 1
-    const desired = 360
-    const towards = (dist > desired ? 1 : -1)
-    this.setVelocity((dx / dist) * this.speed * towards, (dy / dist) * this.speed * towards)
+    const vx = (dx / dist) * this.speed * 0.8
+    const vy = (dy / dist) * this.speed * 0.8
+    this.setVelocity(vx, vy)
   }
   destroy(fromScene?: boolean): void {
     this.salvoTimer?.remove()

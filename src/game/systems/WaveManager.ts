@@ -52,9 +52,25 @@ export class WaveManager {
     shooterPercentage /= total;
     splitterPercentage /= total;
 
-    // Boss every 5 waves, and also on wave 1 during development for testing
+    // Boss every 5 waves (5,10,15...), and also on wave 1 during development for testing
     const isBoss = this.currentWave % 5 === 0 || (IS_DEV && this.currentWave === 1);
-    const bossType: 'sentinel' | 'artillery' | undefined = isBoss ? (this.currentWave % 10 === 0 ? 'artillery' : 'sentinel') : undefined;
+    let bossType: 'sentinel' | 'artillery' | undefined = undefined;
+    if (isBoss) {
+      if (IS_DEV && this.currentWave === 1) {
+        // On wave 1 during development, force the alternate boss for testing
+        bossType = 'artillery';
+      } else if (this.currentWave === 5) {
+        bossType = 'sentinel';
+      } else if (this.currentWave === 10) {
+        bossType = 'artillery';
+      } else if (this.currentWave > 10) {
+        // After wave 10, randomize boss type at each boss wave
+        bossType = Math.random() < 0.5 ? 'sentinel' : 'artillery';
+      } else {
+        // Fallback for unexpected cases
+        bossType = this.currentWave % 10 === 0 ? 'artillery' : 'sentinel';
+      }
+    }
 
     // Titles (use a clean boss index)
     const bossIndex = Math.max(1, Math.ceil(this.currentWave / 5));
