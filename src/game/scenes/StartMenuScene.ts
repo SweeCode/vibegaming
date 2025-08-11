@@ -107,7 +107,7 @@ export class StartMenuScene extends Phaser.Scene {
 
     // Add scanline overlay
     this.createScanlines();
-    
+
     // Setup keyboard shortcuts
     this.setupKeyboardShortcuts();
 
@@ -225,7 +225,7 @@ export class StartMenuScene extends Phaser.Scene {
     if (this.showingLeaderboard) return;
 
     this.showingLeaderboard = true;
-    
+
     // Hide main menu buttons
     this.startButton.setVisible(false);
     this.optionsButton.setVisible(false);
@@ -505,7 +505,7 @@ export class StartMenuScene extends Phaser.Scene {
     // Clear leaderboard data for both modes
     localStorage.removeItem('leaderboard');
     localStorage.removeItem('leaderboard_wave');
-    
+
     // Show confirmation message
     const confirmText = this.add.text(this.scale.width / 2, this.scale.height - 100, 'Leaderboards Reset!', {
       fontSize: '32px',
@@ -532,7 +532,7 @@ export class StartMenuScene extends Phaser.Scene {
     const soundAny = this.sound as unknown as { locked?: boolean; context?: AudioContext };
     if (soundAny.locked || (soundAny.context && soundAny.context.state !== 'running')) {
       this.input.once('pointerdown', tryUnlock);
-      this.input.keyboard?.once('keydown', tryUnlock as unknown as (e: KeyboardEvent) => void);
+      this.input.keyboard?.once('keydown', tryUnlock);
     }
   }
 

@@ -232,7 +232,7 @@ export class WaveScene extends Phaser.Scene {
   private setupSpawnTimer() {
     const waveSettings = this.waveManager.getCurrentWaveSettings();
     if (IS_DEV) console.log(`Setting up spawn timer for wave ${waveSettings.waveNumber}: ${waveSettings.enemyCount} enemies, ${waveSettings.spawnDelay}ms delay`);
-    
+
     if (this.spawnTimer) {
       this.spawnTimer.destroy();
     }
@@ -253,7 +253,7 @@ export class WaveScene extends Phaser.Scene {
 
     const waveSettings = this.waveManager.getCurrentWaveSettings();
     if (IS_DEV) console.log(`Spawning enemy for wave ${waveSettings.waveNumber}`);
-    
+
     // Use wave-based enemy spawning
     this.enemySpawner.spawnWithWave(waveSettings);
     this.waveManager.onEnemySpawned();
@@ -266,7 +266,7 @@ export class WaveScene extends Phaser.Scene {
 
     const waveProgress = this.waveManager.getWaveProgress();
     const activeEnemies = this.enemies.countActive();
-    
+
     // Debug logging
     if (IS_DEV) console.log(`Wave ${this.waveManager.getCurrentWave()}: Spawned ${waveProgress.spawned}/${waveProgress.total}, Killed ${waveProgress.killed}/${waveProgress.total}, Active: ${activeEnemies}`);
 
@@ -276,7 +276,7 @@ export class WaveScene extends Phaser.Scene {
       // Wave completed, start break
       this.waveManager.startBreak();
       this.showBreakNotification();
-      
+
       const waveSettings = this.waveManager.getCurrentWaveSettings();
       this.breakTimer = this.time.delayedCall(waveSettings.breakDuration, () => {
         this.startNextWave();
@@ -690,11 +690,11 @@ export class WaveScene extends Phaser.Scene {
 
   private handlePlayerEnemyCollision(player: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile, enemy: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile) {
     const enemyObj = enemy as Enemy;
-    
+
     // Award score for enemy collision
     this.score += enemyObj.getScoreValue();
     this.gameUI.updateScore(this.score);
-    
+
     // Splitter behavior on collision
     const isSplitter = (enemyObj as unknown as Phaser.GameObjects.Sprite).texture?.key === 'enemy_splitter';
     const spawnMinis = isSplitter ? GAME_SETTINGS.enemies.splitter.minisOnSplit : 0;
@@ -709,14 +709,14 @@ export class WaveScene extends Phaser.Scene {
         this.enemies.add(mini);
       }
     }
-    
+
     // Count this as an enemy killed for wave progression
     this.waveManager.onEnemyKilled();
     if (IS_DEV) console.log(`Enemy destroyed by collision! Wave progress: ${this.waveManager.getWaveProgress().killed}/${this.waveManager.getWaveProgress().total}`);
-    
+
     const isDead = this.player.takeDamage(GAME_SETTINGS.player.damagePerHit);
     this.gameUI.updateHealthBar(this.player.getHealthPercentage());
-    
+
     if (isDead) {
       this.handleGameOver();
     }
@@ -759,7 +759,7 @@ export class WaveScene extends Phaser.Scene {
 
   private promptScoreEntry() {
     const gameTime = this.getGameTime();
-    
+
     this.time.delayedCall(2000, () => {
       this.scene.start('ScoreEntryScene', { 
         score: this.score, 
@@ -796,7 +796,7 @@ export class WaveScene extends Phaser.Scene {
       if (bullet.body) {
         bullet.body.velocity.set(dirX * playerStats.bulletSpeed, dirY * playerStats.bulletSpeed);
       } else {
-        this.physics.moveTo(bullet, spawnX + dirX * 10, spawnY + dirY * 10, playerStats.bulletSpeed);
+        this.scene.physics.moveTo(bullet as unknown as Phaser.GameObjects.GameObject, spawnX + dirX * 10, spawnY + dirY * 10, playerStats.bulletSpeed);
       }
 
       // Safety TTL to prevent rare stuck bullets
@@ -820,7 +820,7 @@ export class WaveScene extends Phaser.Scene {
     this.gameUI.showReloading();
     const playerStats = this.upgradeManager.getPlayerStats();
     this.reloadingBar.show(playerStats.reloadSpeed);
-    
+
     this.time.delayedCall(playerStats.reloadSpeed, () => {
       this.ammo = playerStats.maxAmmo;
       this.isReloading = false;
@@ -830,7 +830,7 @@ export class WaveScene extends Phaser.Scene {
 
   private updateBullets() {
     if (!this.bullets) return;
-    
+
     for (const bullet of this.bullets.getMatching('active', true)) {
       if (bullet.x < 0 || bullet.x > this.scale.width || bullet.y < 0 || bullet.y > this.scale.height) {
         (bullet as Phaser.GameObjects.Sprite).setActive(false).setVisible(false);
@@ -840,7 +840,7 @@ export class WaveScene extends Phaser.Scene {
 
   private updateEnemies() {
     if (!this.enemies) return;
-    
+
     const margin = 100;
     for (const enemy of this.enemies.getMatching('active', true)) {
       const enemySprite = enemy as Enemy;
@@ -886,22 +886,22 @@ export class WaveScene extends Phaser.Scene {
   private resetGame() {
     this.gameOver = false;
     this.score = 0;
-    
+
     // Refresh player stats in case upgrades were purchased
     this.initializePlayerStats();
-    
+
     this.isReloading = false;
     this.gameStartTime = Date.now();
-    
+
     this.player.setPosition(this.scale.width / 2, this.scale.height / 2);
     this.player.reset();
     this.gameUI.reset();
     this.reloadingBar.hide();
     this.waveManager.reset();
-    
+
     this.enemies.clear(true, true);
     this.bullets.clear(true, true);
-    
+
     if (this.spawnTimer) this.spawnTimer.destroy();
     if (this.breakTimer) this.breakTimer.destroy();
     // Clear enemy bullets as well
@@ -911,7 +911,7 @@ export class WaveScene extends Phaser.Scene {
     }
     // Fully cleanup any existing boss
     this.cleanupBoss();
-    
+
     this.physics.resume();
     this.startFirstWave();
   }

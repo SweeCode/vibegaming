@@ -19,7 +19,7 @@ export class CustomizationScene extends Phaser.Scene {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  init(_data: { currentScore?: number } = {}) {
+  init(data: { currentScore?: number } = {}) {
     this.upgradeManager = new UpgradeManager();
     const totalScore = this.getTotalScore();
     const totalSpent = this.upgradeManager.getTotalSpent();

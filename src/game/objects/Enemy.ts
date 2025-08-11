@@ -12,10 +12,10 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   constructor(scene: Phaser.Scene, x: number, y: number, texture: string, speed: number, scoreValue: number, health: number = 1) {
     super(scene, x, y, texture);
-    
+
     scene.add.existing(this);
     scene.physics.add.existing(this);
-    
+
     this.speed = speed;
     this.scoreValue = scoreValue;
     this.health = health;
@@ -230,7 +230,7 @@ export class EnemySpawner {
   spawn() {
     const spawnPoint = this.getRandomSpawnPoint();
     const spawnChance = Math.random();
-    
+
     let enemy: Enemy;
     if (spawnChance < GAME_SETTINGS.enemies.big.spawnChance) {
       enemy = new BigEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player);
@@ -239,14 +239,14 @@ export class EnemySpawner {
     } else {
       enemy = new RegularEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player);
     }
-    
+
     this.enemyGroup.add(enemy);
   }
 
   spawnWithDifficulty(difficulty: DifficultySettings) {
     const spawnPoint = this.getRandomSpawnPoint();
     const spawnChance = Math.random();
-    
+
     let enemy: Enemy;
     if (spawnChance < difficulty.bigEnemyChance) {
       enemy = new BigEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player, difficulty.enemySpeedMultiplier);
@@ -257,14 +257,14 @@ export class EnemySpawner {
     } else {
       enemy = new RegularEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player, difficulty.enemySpeedMultiplier);
     }
-    
+
     this.enemyGroup.add(enemy);
   }
 
   spawnWithWave(waveSettings: WaveSettings) {
     const spawnPoint = this.getRandomSpawnPoint();
     const spawnChance = Math.random();
-    
+
     let enemy: Enemy;
     const bigCut = waveSettings.enemyTypes.big;
     const fastCut = bigCut + waveSettings.enemyTypes.fast;
@@ -282,7 +282,7 @@ export class EnemySpawner {
     } else {
       enemy = new RegularEnemy(this.scene, spawnPoint.x, spawnPoint.y, this.target as Player);
     }
-    
+
     this.enemyGroup.add(enemy);
   }
 
@@ -292,7 +292,7 @@ export class EnemySpawner {
     const x = Phaser.Math.Between(0, screenWidth);
     const y = Phaser.Math.Between(0, screenHeight);
     const side = Phaser.Math.Between(0, 3);
-    
+
     switch(side) {
       case 0: // top
         return { x, y: -50 };
