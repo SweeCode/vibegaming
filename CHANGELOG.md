@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- Boss waves now have a cinematic intro on all boss waves (warning typewriter + 3-2-1 countdown with camera shakes) replacing the normal wave banner on boss waves
+- Shooter boss volley increased from 5 to 7 shots; bullets flagged as boss-origin for damage scaling
+- Artillery boss overhauled: slow homing movement, doubled salvos (36 shots), fires immediately on spawn, max health set to 50
+- Boss schedule: wave 5 always Sentinel; wave 10 always Artillery; after wave 10, every 5th wave spawns a boss with a 50/50 Sentinel/Artillery split for variety
+- Boss damage scales with later waves: contact damage and boss bullets increase with wave number
+- Wave 1 no longer spawns a boss (was previously forced in dev)
+- Fixed boss overlap/vanish bug by normalizing overlap arguments and only deactivating bullets
+- Robust boss cleanup on death/reset/shutdown; removed lingering colliders/adds; clear enemy bullets on reset
+- Bullet behavior hardened: spawn offset from player, set velocity directly, TTL safety, and cleanup of TTL on hit to prevent ghost deactivations
+- Wave logging and debug logs gated behind IS_DEV only
+- Start menu redesigned with 2D shooter boss theme: parallax starfields, drifting enemy silhouettes, periodic boss flash, scanlines, and pulsing title
+- Added WebAudio unlock handler to resume audio after first user gesture and silence autoplay warnings in production
+
 ## [1.0.0] - 2024-01-XX
 
 ### Added
