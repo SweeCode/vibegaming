@@ -523,11 +523,14 @@ export class StartMenuScene extends Phaser.Scene {
     const tryUnlock = () => {
       try {
         if (this.sound.locked) this.sound.unlock();
-        const ctx = this.sound.context as (AudioContext | undefined);
+        // Best-effort resume for WebAudio; HTML5/NoAudio may not expose context
+        const soundAny = this.sound as unknown as { context?: AudioContext };
+        const ctx = soundAny.context;
         if (ctx && ctx.state === 'suspended') void ctx.resume();
       } catch {}
     };
-    if (this.sound.locked || (this.sound.context && (this.sound.context as AudioContext).state !== 'running')) {
+    const soundAny = this.sound as unknown as { locked?: boolean; context?: AudioContext };
+    if (soundAny.locked || (soundAny.context && soundAny.context.state !== 'running')) {
       this.input.once('pointerdown', tryUnlock);
       this.input.keyboard?.once('keydown', tryUnlock as unknown as (e: KeyboardEvent) => void);
     }
@@ -601,7 +604,10 @@ export class StartMenuScene extends Phaser.Scene {
     const df = (delta / 1000);
     const moveAndWrap = (img: Phaser.GameObjects.Image, speed: number) => {
       img.y += speed * df;
-      if (img.y > h) img.y = -8, img.x = Phaser.Math.Between(0, w);
+      if (img.y > h) {
+        img.y = -8;
+        img.x = Phaser.Math.Between(0, w);
+      }
     };
     this.bgStarsFar?.getChildren().forEach(c => moveAndWrap(c as Phaser.GameObjects.Image, 18));
     this.bgStarsNear?.getChildren().forEach(c => moveAndWrap(c as Phaser.GameObjects.Image, 36));

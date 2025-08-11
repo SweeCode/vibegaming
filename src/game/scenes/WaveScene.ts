@@ -306,7 +306,9 @@ export class WaveScene extends Phaser.Scene {
     this.cleanupBossIntro();
 
     // Compose message
-    const waveNum = this.waveManager.getCurrentWave();
+    // Current wave (reserved for future dynamic messaging)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _waveNum = this.waveManager.getCurrentWave();
     const centerX = this.scale.width / 2;
     const centerY = this.scale.height / 2;
     const bossName = type === 'artillery' ? 'ARTILLERY' : 'SENTINEL';
@@ -332,7 +334,7 @@ export class WaveScene extends Phaser.Scene {
         if (idx >= message.length) {
           typeTimer.remove(false);
           // Start countdown after brief pause
-          const delay = this.time.delayedCall(350, () => this.runBossCountdown(type), [] as unknown as any, this);
+          const delay = this.time.delayedCall(350, () => this.runBossCountdown(type), undefined, this);
           this.bossIntroTimers.push(delay);
         }
       }
@@ -470,7 +472,7 @@ export class WaveScene extends Phaser.Scene {
 
   private spawnBossAdd() {
     if (!this.boss || !this.boss.active) return;
-    const r = Math.random();
+    // Bias spawn mix during boss
     const waveSettings = this.waveManager.getCurrentWaveSettings();
     // Temporarily bias to fast/shooter during boss
     const tempSettings = { ...waveSettings, enemyTypes: { ...waveSettings.enemyTypes, normal: 0.2, fast: 0.4, big: 0.15, shooter: 0.25, splitter: 0 } };
@@ -524,7 +526,6 @@ export class WaveScene extends Phaser.Scene {
     const before = (this.boss as unknown as { getCurrentHealth?: () => number }).getCurrentHealth?.();
     const dead = (this.boss as Boss).takeDamage(dmg);
     const after = (this.boss as unknown as { getCurrentHealth?: () => number }).getCurrentHealth?.();
-    // eslint-disable-next-line no-console
     if (IS_DEV) console.log('Boss hit', { dmg, before, after, dead });
     this.updateBossHealthUI();
     if (dead) {
@@ -558,7 +559,8 @@ export class WaveScene extends Phaser.Scene {
     this.boss = undefined;
   }
 
-  private handlePlayerBossCollision(_playerObj: Phaser.GameObjects.GameObject) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  private handlePlayerBossCollision(_: Phaser.GameObjects.GameObject) {
     if (!this.boss) return;
     // Damage player on contact and slight knockback feeling via camera shake
     this.cameras.main.shake(100, 0.006);
@@ -725,7 +727,7 @@ export class WaveScene extends Phaser.Scene {
     if (!bulletSprite.active) return;
     bulletSprite.setActive(false).setVisible(false);
 
-    const fromBoss = (bulletSprite as any).getData?.('fromBoss') === true;
+    const fromBoss = (bulletSprite as unknown as { getData?: (key: string) => unknown }).getData?.('fromBoss') === true;
     const baseDamage = Math.floor(GAME_SETTINGS.player.maxHealth * GAME_SETTINGS.enemies.shooter.bulletDamagePct);
     if (fromBoss) {
       // Boss bullets do more damage as waves progress
@@ -778,7 +780,7 @@ export class WaveScene extends Phaser.Scene {
     // Compute safe direction (avoid zero-length when clicking on player)
     const dx = pointer.x - this.player.x;
     const dy = pointer.y - this.player.y;
-    let len = Math.hypot(dx, dy);
+    const len = Math.hypot(dx, dy);
     const dirX = len > 0.0001 ? dx / len : 1;
     const dirY = len > 0.0001 ? dy / len : 0;
     // Spawn slightly in front to avoid overlapping the player hitbox
