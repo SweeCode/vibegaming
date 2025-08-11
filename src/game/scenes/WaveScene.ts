@@ -21,6 +21,9 @@ export class WaveScene extends Phaser.Scene {
   private bossHealthBar?: Phaser.GameObjects.Graphics;
   private bossHealthText?: Phaser.GameObjects.Text;
   private bossAddTimer?: Phaser.Time.TimerEvent;
+  private bossBulletOverlap?: Phaser.Physics.Arcade.Collider;
+  // Prevent multiple damage applications from a single collision/frame
+  private bossHitCooldownUntil: number = 0;
   private score = 0;
   private ammo = GAME_SETTINGS.weapons.bullet.maxAmmo;
   private maxAmmo = GAME_SETTINGS.weapons.bullet.maxAmmo;
@@ -46,6 +49,8 @@ export class WaveScene extends Phaser.Scene {
       this.breakTimer.destroy();
       this.breakTimer = undefined;
     }
+    this.bossBulletOverlap?.destroy();
+    this.bossBulletOverlap = undefined;
   }
 
   preload() {
@@ -79,6 +84,7 @@ export class WaveScene extends Phaser.Scene {
 
     this.updateBullets();
     this.updateEnemies();
+    // If boss exists, do not count off-screen enemies toward wave progress
     if (this.boss && this.boss.active) {
       // Ensure boss AI/movement runs
       (this.boss as Boss).update();
@@ -288,14 +294,29 @@ export class WaveScene extends Phaser.Scene {
   private spawnBoss(type: 'sentinel' | 'artillery') {
     this.enemies.clear(true, true);
     if (this.spawnTimer) { this.spawnTimer.destroy(); this.spawnTimer = undefined; }
+    this.bossHitCooldownUntil = 0;
     const x = this.scale.width / 2;
     const y = this.scale.height / 2 - 150;
     // Boss constructors already add themselves to the scene and physics
     this.boss = type === 'artillery' ? new ArtilleryBoss(this, x, y, this.player) : new SentinelBoss(this, x, y, this.player);
-    this.boss.setActive(true).setVisible(true);
-    // Collisions for boss
-    this.physics.add.collider(this.bullets, this.boss, this.handleBulletBossCollision as unknown as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback, undefined, this);
+    this.boss.setActive(true).setVisible(true).setDepth(1000);
+    // Ensure boss isn't in enemies group
+    if (this.enemies.contains(this.boss as unknown as Phaser.GameObjects.GameObject)) {
+      this.enemies.remove(this.boss as unknown as Phaser.GameObjects.GameObject, false, false);
+    }
+    // Collisions for boss: use overlap for bullets to avoid physics separation side-effects
+    // Clean up any previous boss collider first
+    this.bossBulletOverlap?.destroy();
+    this.bossBulletOverlap = this.physics.add.overlap(
+      this.bullets,
+      this.boss,
+      this.handleBulletBossCollision as unknown as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+      undefined,
+      this
+    );
     this.physics.add.collider(this.player, this.boss, this.handlePlayerBossCollision as unknown as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback, undefined, this);
+    // Ensure the boss body is immovable relative to player collision too
+    ;(this.boss.body as Phaser.Physics.Arcade.Body).immovable = true
     this.createBossHealthUI();
     this.startBossAdds();
   }
@@ -356,23 +377,68 @@ export class WaveScene extends Phaser.Scene {
     this.enemySpawner.spawnWithWave(tempSettings);
   }
 
-  private handleBulletBossCollision(bulletObj: Phaser.GameObjects.GameObject, _bossObj: Phaser.GameObjects.GameObject) {
-    const bullet = bulletObj as Phaser.GameObjects.Sprite;
-    if (!bullet.active || !this.boss) return;
-    bullet.setActive(false).setVisible(false);
-    const dmg = this.upgradeManager.getPlayerStats().bulletDamage;
+  private handleBulletBossCollision(objA: Phaser.GameObjects.GameObject, objB: Phaser.GameObjects.GameObject) {
+    if (!this.boss) return;
+
+    // Normalize arguments so we always treat the bullet correctly even if order varies
+    const isObjABullet = !!this.bullets && this.bullets.contains(objA);
+    const isObjBBullet = !!this.bullets && this.bullets.contains(objB);
+
+    let bullet = (isObjABullet ? objA : objB) as (Phaser.GameObjects.Sprite & { body?: Phaser.Physics.Arcade.Body, ttlEvent?: Phaser.Time.TimerEvent });
+    let other = (isObjABullet ? objB : objA) as Phaser.GameObjects.Sprite;
+
+    // If neither object is recognized as a bullet (unexpected), fallback by comparing to boss reference
+    if (!isObjABullet && !isObjBBullet) {
+      if (objA === this.boss) {
+        bullet = objB as Phaser.GameObjects.Sprite & { body?: Phaser.Physics.Arcade.Body };
+        other = objA as Phaser.GameObjects.Sprite;
+      } else if (objB === this.boss) {
+        bullet = objA as Phaser.GameObjects.Sprite & { body?: Phaser.Physics.Arcade.Body };
+        other = objB as Phaser.GameObjects.Sprite;
+      }
+    }
+
+    // Ensure we never disable the boss by mistake
+    if (other === (this.boss as unknown)) {
+      if (!bullet || !bullet.active) return;
+      // Deactivate the bullet without disabling its body, to simplify pooling reuse
+      const b = bullet as Phaser.GameObjects.Sprite & { body?: Phaser.Physics.Arcade.Body, ttlEvent?: Phaser.Time.TimerEvent };
+      // Clear any lingering TTL from previous uses before deactivating
+      if (b.ttlEvent) { b.ttlEvent.remove(false); b.ttlEvent = undefined; }
+      if (b.body) {
+        b.body.velocity.set(0, 0);
+      }
+      b.setActive(false).setVisible(false);
+    } else {
+      // If normalization failed, do not risk disabling a non-bullet object
+      return;
+    }
+
+    // Guard against multiple boss hits in the same frame/tick
+    const now = this.time.now;
+    if (now < this.bossHitCooldownUntil) return;
+    this.bossHitCooldownUntil = now + 60; // ~1 tick at 60fps
+
+    // Bosses take fixed damage per hit to guarantee multi-hit fights
+    const dmg = 1;
+    const before = (this.boss as unknown as { getCurrentHealth?: () => number }).getCurrentHealth?.();
     const dead = (this.boss as Boss).takeDamage(dmg);
+    const after = (this.boss as unknown as { getCurrentHealth?: () => number }).getCurrentHealth?.();
+    // eslint-disable-next-line no-console
+    console.log('Boss hit', { dmg, before, after, dead });
     this.updateBossHealthUI();
     if (dead) {
       this.score += (this.boss as Boss).getScoreValue();
       (this.boss as Boss).destroy();
       this.boss = undefined;
+      // Remove boss bullet overlap collider and clear any remaining adds
+      this.bossBulletOverlap?.destroy();
+      this.bossBulletOverlap = undefined;
+      this.enemies.clear(true, true);
       this.bossHealthBar?.destroy(); this.bossHealthBar = undefined;
       this.bossHealthText?.destroy(); this.bossHealthText = undefined;
       this.stopBossAdds();
-      // Camera shake for dramatic finish
       this.cameras.main.shake(200, 0.01);
-      // Begin break
       this.waveManager.startBreak();
       this.showBreakNotification();
       const waveSettings = this.waveManager.getCurrentWaveSettings();
@@ -478,55 +544,31 @@ export class WaveScene extends Phaser.Scene {
       }
     }
 
-    bulletObj.setActive(false).setVisible(false);
-    
-    const playerStats = this.upgradeManager.getPlayerStats();
-    let deadProcessed = false;
-    // Boss hit?
-    if (this.boss && (enemy as unknown) === (this.boss.body as unknown)) {
-      const sprite = this.boss as Boss;
-      const bossDead = sprite.takeDamage(playerStats.bulletDamage);
-      if (this.bossHealthBar) { this.bossHealthBar.clear(); }
-      if (bossDead) {
-        this.score += sprite.getScoreValue();
-        sprite.destroy();
-        this.boss = undefined;
-        this.bossHealthBar?.destroy(); this.bossHealthBar = undefined;
-        this.bossHealthText?.destroy(); this.bossHealthText = undefined;
-        deadProcessed = true;
-        // Start break immediately
-        this.waveManager.startBreak();
-        this.showBreakNotification();
-        const waveSettings = this.waveManager.getCurrentWaveSettings();
-        this.breakTimer = this.time.delayedCall(waveSettings.breakDuration, () => {
-          this.startNextWave();
-        });
-      }
-    } else {
-      const isDead = enemyObj.takeDamage(playerStats.bulletDamage);
-      if (isDead) {
-        deadProcessed = true;
-        this.score += enemyObj.getScoreValue();
-        const isSplitter = (enemyObj as unknown as Phaser.GameObjects.Sprite).texture?.key === 'enemy_splitter';
-        const spawnMinis = isSplitter ? GAME_SETTINGS.enemies.splitter.minisOnSplit : 0;
-        const ex = (enemyObj as Phaser.GameObjects.Sprite).x;
-        const ey = (enemyObj as Phaser.GameObjects.Sprite).y;
-        enemyObj.destroy();
-        if (isSplitter && this.enemies) {
-          for (let i = 0; i < spawnMinis; i++) {
-            const angle = (Math.PI * 2 * i) / spawnMinis + Math.random() * 0.5;
-            const offset = 10;
-            const mini = new MiniEnemy(this, ex + Math.cos(angle) * offset, ey + Math.sin(angle) * offset, this.player);
-            this.enemies.add(mini);
-          }
-        }
-        this.waveManager.onEnemyKilled();
-        console.log(`Enemy killed! Wave progress: ${this.waveManager.getWaveProgress().killed}/${this.waveManager.getWaveProgress().total}`);
-        this.gameUI.updateScore(this.score);
-      }
+    const b = bulletObj as Phaser.GameObjects.Sprite & { body?: Phaser.Physics.Arcade.Body, ttlEvent?: Phaser.Time.TimerEvent };
+    if (b.ttlEvent) { b.ttlEvent.remove(false); b.ttlEvent = undefined; }
+    if (b.body) {
+      b.body.velocity.set(0, 0);
     }
-    if (deadProcessed) {
+    b.setActive(false).setVisible(false);
+    const playerStats = this.upgradeManager.getPlayerStats();
+    const isDead = enemyObj.takeDamage(playerStats.bulletDamage);
+    if (isDead) {
       this.score += enemyObj.getScoreValue();
+      const isSplitter = (enemyObj as unknown as Phaser.GameObjects.Sprite).texture?.key === 'enemy_splitter';
+      const spawnMinis = isSplitter ? GAME_SETTINGS.enemies.splitter.minisOnSplit : 0;
+      const ex = (enemyObj as Phaser.GameObjects.Sprite).x;
+      const ey = (enemyObj as Phaser.GameObjects.Sprite).y;
+      enemyObj.destroy();
+      if (isSplitter && this.enemies) {
+        for (let i = 0; i < spawnMinis; i++) {
+          const angle = (Math.PI * 2 * i) / spawnMinis + Math.random() * 0.5;
+          const offset = 10;
+          const mini = new MiniEnemy(this, ex + Math.cos(angle) * offset, ey + Math.sin(angle) * offset, this.player);
+          this.enemies.add(mini);
+        }
+      }
+      this.waveManager.onEnemyKilled();
+      console.log(`Enemy killed! Wave progress: ${this.waveManager.getWaveProgress().killed}/${this.waveManager.getWaveProgress().total}`);
       this.gameUI.updateScore(this.score);
     }
   }
@@ -609,11 +651,35 @@ export class WaveScene extends Phaser.Scene {
 
     if (this.isReloading || this.ammo === 0) return;
 
-    const bullet = this.bullets.get(this.player.x, this.player.y);
+    // Compute safe direction (avoid zero-length when clicking on player)
+    const dx = pointer.x - this.player.x;
+    const dy = pointer.y - this.player.y;
+    let len = Math.hypot(dx, dy);
+    const dirX = len > 0.0001 ? dx / len : 1;
+    const dirY = len > 0.0001 ? dy / len : 0;
+    // Spawn slightly in front to avoid overlapping the player hitbox
+    const spawnOffset = 18;
+    const spawnX = this.player.x + dirX * spawnOffset;
+    const spawnY = this.player.y + dirY * spawnOffset;
+
+    const bullet = this.bullets.get(spawnX, spawnY) as (Phaser.GameObjects.Sprite & { body?: Phaser.Physics.Arcade.Body, ttlEvent?: Phaser.Time.TimerEvent }) | null;
     if (bullet) {
       bullet.setActive(true).setVisible(true);
       const playerStats = this.upgradeManager.getPlayerStats();
-      this.physics.moveTo(bullet, pointer.x, pointer.y, playerStats.bulletSpeed);
+      // Set velocity directly to ensure consistent launch even for close clicks
+      if (bullet.body) {
+        bullet.body.velocity.set(dirX * playerStats.bulletSpeed, dirY * playerStats.bulletSpeed);
+      } else {
+        this.physics.moveTo(bullet, spawnX + dirX * 10, spawnY + dirY * 10, playerStats.bulletSpeed);
+      }
+
+      // Safety TTL to prevent rare stuck bullets
+      bullet.ttlEvent?.remove(false);
+      bullet.ttlEvent = this.time.delayedCall(2000, () => {
+        if (bullet.active) bullet.setActive(false).setVisible(false);
+        bullet.ttlEvent = undefined;
+      });
+
       this.ammo--;
       this.gameUI.updateAmmo(this.ammo);
 
@@ -656,10 +722,13 @@ export class WaveScene extends Phaser.Scene {
           enemySprite.x > this.scale.width + margin || 
           enemySprite.y < -margin || 
           enemySprite.y > this.scale.height + margin) {
-        this.score += enemySprite.getScoreValue();
-        this.gameUI.updateScore(this.score);
-        this.waveManager.onEnemyKilled();
-        console.log(`Enemy went off-screen! Wave progress: ${this.waveManager.getWaveProgress().killed}/${this.waveManager.getWaveProgress().total}`);
+        // During boss waves, do not count off-screen enemies as kills
+        if (!this.boss || !this.boss.active) {
+          this.score += enemySprite.getScoreValue();
+          this.gameUI.updateScore(this.score);
+          this.waveManager.onEnemyKilled();
+          console.log(`Enemy went off-screen! Wave progress: ${this.waveManager.getWaveProgress().killed}/${this.waveManager.getWaveProgress().total}`);
+        }
         enemySprite.destroy();
       }
     }
@@ -709,6 +778,12 @@ export class WaveScene extends Phaser.Scene {
     
     if (this.spawnTimer) this.spawnTimer.destroy();
     if (this.breakTimer) this.breakTimer.destroy();
+    this.bossBulletOverlap?.destroy();
+    this.bossBulletOverlap = undefined;
+    if (this.boss) {
+      (this.boss as Boss).destroy();
+      this.boss = undefined;
+    }
     
     this.physics.resume();
     this.startFirstWave();

@@ -334,6 +334,8 @@ export abstract class Boss extends Phaser.Physics.Arcade.Sprite {
   }
 
   getHealthPct(): number { return Math.max(0, this.currentHealth / this.maxHealth) }
+  getCurrentHealth(): number { return this.currentHealth }
+  getMaxHealth(): number { return this.maxHealth }
   getScoreValue(): number { return this.scoreValue }
 }
 
@@ -345,7 +347,9 @@ export class SentinelBoss extends Boss {
   private lastShoot = 0
 
   constructor(scene: Phaser.Scene, x: number, y: number, target: Player) {
-    super(scene, x, y, 'boss_sentinel', target, 300, 110, 500)
+    // Wave boss: ensure at least 40 HP
+    super(scene, x, y, 'boss_sentinel', target, 40, 110, 500)
+    this.setImmovable(true)
     this.startPhases()
   }
 

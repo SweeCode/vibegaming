@@ -160,7 +160,7 @@ export class MainScene extends Phaser.Scene {
   }
 
   private setupCollisions() {
-    this.physics.add.collider(this.bullets, this.enemies, this.handleBulletEnemyCollision, undefined, this);
+    this.physics.add.overlap(this.bullets, this.enemies, this.handleBulletEnemyCollision, undefined, this);
     this.physics.add.collider(this.player, this.enemies, this.handlePlayerEnemyCollision, undefined, this);
     this.physics.add.overlap(this.player, this.enemyBullets, (playerObj, bulletObj) => this.handlePlayerHitByEnemyBullet(playerObj as Phaser.GameObjects.GameObject, bulletObj as Phaser.GameObjects.GameObject), undefined, this);
   }
@@ -291,11 +291,34 @@ export class MainScene extends Phaser.Scene {
 
     if (this.isReloading || this.ammo === 0) return;
 
-    const bullet = this.bullets.get(this.player.x, this.player.y);
+    // Compute safe direction to avoid zero-length vector when clicking on player
+    const dx = pointer.x - this.player.x;
+    const dy = pointer.y - this.player.y;
+    const len = Math.hypot(dx, dy);
+    const dirX = len > 0.0001 ? dx / len : 1;
+    const dirY = len > 0.0001 ? dy / len : 0;
+    // Offset spawn so the bullet doesn't start inside the player
+    const spawnOffset = 18;
+    const spawnX = this.player.x + dirX * spawnOffset;
+    const spawnY = this.player.y + dirY * spawnOffset;
+
+    const bullet = this.bullets.get(spawnX, spawnY) as (Phaser.GameObjects.Sprite & { body?: Phaser.Physics.Arcade.Body, ttlEvent?: Phaser.Time.TimerEvent }) | null;
     if (bullet) {
       bullet.setActive(true).setVisible(true);
       const playerStats = this.upgradeManager.getPlayerStats();
-      this.physics.moveTo(bullet, pointer.x, pointer.y, playerStats.bulletSpeed);
+      if (bullet.body) {
+        bullet.body.velocity.set(dirX * playerStats.bulletSpeed, dirY * playerStats.bulletSpeed);
+      } else {
+        this.physics.moveTo(bullet, spawnX + dirX * 10, spawnY + dirY * 10, playerStats.bulletSpeed);
+      }
+
+      // Safety TTL to avoid rare stuck bullets
+      bullet.ttlEvent?.remove(false);
+      bullet.ttlEvent = this.time.delayedCall(2000, () => {
+        if (bullet.active) bullet.setActive(false).setVisible(false);
+        bullet.ttlEvent = undefined;
+      });
+
       this.ammo--;
       this.gameUI.updateAmmo(this.ammo);
 

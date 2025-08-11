@@ -1,3 +1,5 @@
+import { IS_DEV } from '../config/gameConfig'
+
 export interface WaveSettings {
   waveNumber: number;
   title: string;
@@ -50,12 +52,13 @@ export class WaveManager {
     shooterPercentage /= total;
     splitterPercentage /= total;
 
-    // Boss every 5 waves
-    const isBoss = this.currentWave % 5 === 0;
+    // Boss every 5 waves, and also on wave 1 during development for testing
+    const isBoss = this.currentWave % 5 === 0 || (IS_DEV && this.currentWave === 1);
     const bossType: 'sentinel' | 'artillery' | undefined = isBoss ? (this.currentWave % 10 === 0 ? 'artillery' : 'sentinel') : undefined;
 
-    // Titles
-    const title = isBoss ? `BOSS ${this.currentWave / 5}` : `Wave ${this.currentWave}`;
+    // Titles (use a clean boss index)
+    const bossIndex = Math.max(1, Math.ceil(this.currentWave / 5));
+    const title = isBoss ? `BOSS ${bossIndex}` : `Wave ${this.currentWave}`;
 
     return {
       waveNumber: this.currentWave,

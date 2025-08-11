@@ -1,3 +1,5 @@
+import * as Phaser from 'phaser'
+
 export const GAME_CONFIG = {
   width: window.innerWidth,
   height: window.innerHeight,
