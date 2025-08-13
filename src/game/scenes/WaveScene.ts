@@ -60,6 +60,7 @@ export class WaveScene extends Phaser.Scene {
     }
     this.cleanupBoss();
     this.cleanupBossIntro();
+    if (this.drone) { this.drone.destroy(); this.drone = undefined; }
   }
 
   preload() {
@@ -678,12 +679,22 @@ export class WaveScene extends Phaser.Scene {
         b.body.velocity.scale(1.0);
       }
     } else if ((b.bounceLeft ?? 0) > 0) {
-      // Simple ricochet: invert velocity slightly randomized
+      // Smarter ricochet: retarget nearest enemy
       if (b.body) {
         b.bounceLeft = (b.bounceLeft ?? 0) - 1;
-        b.body.velocity.set(-b.body.velocity.x, -b.body.velocity.y);
-        const jitter = 0.2;
-        b.body.velocity.rotate(Phaser.Math.FloatBetween(-jitter, jitter));
+        const target = this.getNearestEnemy(b.x, b.y);
+        if (target) {
+          const ts = target as Phaser.GameObjects.Sprite;
+          const dx = ts.x - b.x;
+          const dy = ts.y - b.y;
+          const len = Math.hypot(dx, dy) || 1;
+          const speed = b.body.velocity.length();
+          b.body.velocity.set((dx / len) * speed, (dy / len) * speed);
+        } else {
+          // Fallback invert with slight jitter
+          b.body.velocity.set(-b.body.velocity.x, -b.body.velocity.y);
+          b.body.velocity.rotate(Phaser.Math.FloatBetween(-0.2, 0.2));
+        }
       }
     } else {
       if (b.ttlEvent) { b.ttlEvent.remove(false); b.ttlEvent = undefined; }
@@ -693,7 +704,9 @@ export class WaveScene extends Phaser.Scene {
       b.setActive(false).setVisible(false);
     }
     const playerStats = this.upgradeManager.getPlayerStats();
-    const isDead = enemyObj.takeDamage(playerStats.bulletDamage);
+    const fromDrone = (bulletObj as unknown as { getData?: (k: string) => unknown }).getData?.('fromDrone') === true;
+    const dmg = fromDrone ? Math.max(1, Math.ceil(playerStats.bulletDamage * 0.5)) : playerStats.bulletDamage;
+    const isDead = enemyObj.takeDamage(dmg);
     if (isDead) {
       this.score += enemyObj.getScoreValue();
       const isSplitter = (enemyObj as unknown as Phaser.GameObjects.Sprite).texture?.key === 'enemy_splitter';

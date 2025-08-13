@@ -25,15 +25,22 @@ export interface UpgradeLevels {
   bulletDamage: number;
 }
 
+import { SkillTreeManager } from './SkillTreeManager'
+import { IS_DEV } from '../config/gameConfig'
+
 export class UpgradeManager {
   private upgradeLevels: UpgradeLevels;
   private baseCosts: UpgradeCosts;
   private maxLevels: UpgradeLevels;
+  private skillTree: SkillTreeManager;
 
   constructor() {
-    // Initialize upgrade levels from localStorage or defaults
+    // Initialize legacy upgrades (for backward compatibility and migration of UI)
     this.upgradeLevels = this.loadUpgradeLevels();
-    // Kick off background remote sync
+    // Initialize skill tree manager
+    this.skillTree = new SkillTreeManager();
+    void this.skillTree.initialize();
+    // Kick off background remote sync for legacy (migration support only)
     void this.loadFromRemote();
     
     // Base costs for first upgrade level
@@ -138,24 +145,41 @@ export class UpgradeManager {
   }
 
   getPlayerStats(): PlayerStats {
-    const baseStats = {
-      health: 100,
-      speed: 200,
-      maxAmmo: 10,
-      reloadSpeed: 2000,
-      bulletSpeed: 400,
-      bulletDamage: 1
-    };
+    // Prefer skill tree effective stats; fallback to legacy if skill tree not initialized yet
+    try {
+      const s = this.skillTree.getEffectiveStats();
+      return { ...s } as PlayerStats;
+    } catch {
+      const baseStats = {
+        health: 100,
+        speed: 200,
+        maxAmmo: 10,
+        reloadSpeed: 2000,
+        bulletSpeed: 400,
+        bulletDamage: 1
+      };
+      return {
+        health: baseStats.health + (this.upgradeLevels.health * 25),
+        speed: baseStats.speed + (this.upgradeLevels.speed * 20),
+        maxAmmo: baseStats.maxAmmo + (this.upgradeLevels.maxAmmo * 2),
+        reloadSpeed: Math.max(500, baseStats.reloadSpeed - (this.upgradeLevels.reloadSpeed * 150)),
+        bulletSpeed: baseStats.bulletSpeed + (this.upgradeLevels.bulletSpeed * 50),
+        bulletDamage: baseStats.bulletDamage + (this.upgradeLevels.bulletDamage * 1)
+      };
+    }
+  }
 
-    // Calculate upgraded stats
-    return {
-      health: baseStats.health + (this.upgradeLevels.health * 25), // +25 health per level
-      speed: baseStats.speed + (this.upgradeLevels.speed * 20), // +20 speed per level
-      maxAmmo: baseStats.maxAmmo + (this.upgradeLevels.maxAmmo * 2), // +2 ammo per level
-      reloadSpeed: Math.max(500, baseStats.reloadSpeed - (this.upgradeLevels.reloadSpeed * 150)), // -150ms per level, min 500ms
-      bulletSpeed: baseStats.bulletSpeed + (this.upgradeLevels.bulletSpeed * 50), // +50 speed per level
-      bulletDamage: baseStats.bulletDamage + (this.upgradeLevels.bulletDamage * 1) // +1 damage per level
-    };
+  getModifiers() {
+    try {
+      const mods = this.skillTree.getActiveModifiers();
+      // In development, unlock pet drone for everyone
+      if (IS_DEV) {
+        mods.petDrone = { enabled: true, dps: mods.petDrone?.dps ?? 5 };
+      }
+      return mods;
+    } catch {
+      return { damageReductionPct: 0, healPerSecond: 0, ricochetBounces: 0, pierceCount: 0, petDrone: { enabled: false, dps: 0 }, shieldAfterIdle: { enabled: false, idleSeconds: 0, shieldHp: 0 } };
+    }
   }
 
   getStatIncrease(stat: keyof UpgradeLevels): number {

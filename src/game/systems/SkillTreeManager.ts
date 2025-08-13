@@ -251,11 +251,11 @@ function defineNodes(): SkillNode[] {
   })
   nodes.push({
     id: 'special_ricochet_1', title: 'Ricochet Rounds', description: '+1 bounce', specialization: 'special', position: { x: 1, y: 0 }, maxRank: 1, baseCost: 600, costScale: 1.6,
-    effectPerRank: (_r) => ({ modifiers: { ricochetBounces: 1 } }), prerequisites: [{ nodeId: 'special_pierce_1', minRank: 1 }]
+    effectPerRank: (r) => ({ modifiers: { ricochetBounces: Math.min(1, r) } }), prerequisites: [{ nodeId: 'special_pierce_1', minRank: 1 }]
   })
   nodes.push({
     id: 'special_pet_1', title: 'Pet Drone', description: 'Summon drone helper', specialization: 'special', position: { x: 2, y: 0 }, maxRank: 1, baseCost: 800, costScale: 1.6,
-    effectPerRank: (_r) => ({ modifiers: { petDrone: { enabled: true, dps: 5 } } }), prerequisites: [{ nodeId: 'special_pierce_1', minRank: 1 }]
+    effectPerRank: (r) => ({ modifiers: { petDrone: { enabled: r > 0, dps: 5 } } }), prerequisites: [{ nodeId: 'special_pierce_1', minRank: 1 }]
   })
 
   // Defensive branch
@@ -273,7 +273,7 @@ function defineNodes(): SkillNode[] {
   })
   nodes.push({
     id: 'defense_shield_1', title: 'Reactive Shield', description: 'Shield after 5s idle', specialization: 'defense', position: { x: 1, y: 1 }, maxRank: 1, baseCost: 700, costScale: 1.6,
-    effectPerRank: (_r) => ({ modifiers: { shieldAfterIdle: { enabled: true, idleSeconds: 5, shieldHp: 50 } } }), prerequisites: [{ nodeId: 'defense_dr_1', minRank: 1 }]
+    effectPerRank: (r) => ({ modifiers: { shieldAfterIdle: { enabled: r > 0, idleSeconds: 5, shieldHp: 50 } } }), prerequisites: [{ nodeId: 'defense_dr_1', minRank: 1 }]
   })
 
   return nodes
