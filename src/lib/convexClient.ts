@@ -34,6 +34,11 @@ export function getOrCreateIdentity(): ClientIdentity {
   return identity
 }
 
+export function getCurrentUserKey(): string {
+  // Placeholder for future auth-based identity. For now, deviceId is the user key.
+  return getDeviceId()
+}
+
 type PublicScore = { name: string; score: number; time: number; createdAt: number }
 
 export async function fetchTopScoresConvex(mode: 'endless' | 'wave', limit = 50): Promise<Array<PublicScore> | null> {
@@ -94,6 +99,41 @@ export async function saveUpgradesConvex(levels: UpgradeLevelsPayload): Promise<
     await (client as unknown as { mutation: (name: string, args: unknown) => Promise<unknown> }).mutation(
       'upgrades:saveUpgrades',
       { deviceId: getDeviceId(), levels }
+    )
+  } catch {
+    // ignore
+  }
+}
+
+export type SkillTreeStatePayload = {
+  version: number
+  unlocked: Record<string, number>
+  totalSpent: number
+  updatedAt: number
+}
+
+export async function loadSkillTreeConvex(): Promise<SkillTreeStatePayload | null> {
+  const client = getConvexClient()
+  if (!client) return null
+  try {
+    const result = await (client as unknown as { query: (name: string, args: unknown) => Promise<unknown> }).query(
+      'skillTree:getSkillTree',
+      { userKey: getCurrentUserKey() }
+    )
+    if (result && typeof result === 'object') return result as SkillTreeStatePayload
+    return null
+  } catch {
+    return null
+  }
+}
+
+export async function saveSkillTreeConvex(state: SkillTreeStatePayload): Promise<void> {
+  const client = getConvexClient()
+  if (!client) return
+  try {
+    await (client as unknown as { mutation: (name: string, args: unknown) => Promise<unknown> }).mutation(
+      'skillTree:saveSkillTree',
+      { userKey: getCurrentUserKey(), state }
     )
   } catch {
     // ignore

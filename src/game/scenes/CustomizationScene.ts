@@ -1,8 +1,10 @@
 import * as Phaser from 'phaser';
 import { UpgradeManager, UpgradeLevels, PlayerStats } from '../systems/UpgradeManager';
+import { SkillTreeManager, SkillNode, Specialization } from '../systems/SkillTreeManager';
 
 export class CustomizationScene extends Phaser.Scene {
   private upgradeManager!: UpgradeManager;
+  private skillTree!: SkillTreeManager;
   private currentScore = 0;
   private scoreText!: Phaser.GameObjects.Text;
   private backButton!: Phaser.GameObjects.Text;
@@ -12,6 +14,11 @@ export class CustomizationScene extends Phaser.Scene {
   private upgradeButtons: { [key: string]: Phaser.GameObjects.Text } = {};
   private costTexts: { [key: string]: Phaser.GameObjects.Text } = {};
   private levelTexts: { [key: string]: Phaser.GameObjects.Text } = {};
+  // Skill tree UI state
+  private selectedSpec: Specialization = 'basic';
+  private tabTexts: Partial<Record<Specialization, Phaser.GameObjects.Text>> = {};
+  private nodeContainers: Phaser.GameObjects.Container[] = [];
+  private linkLines: Phaser.GameObjects.Graphics[] = [];
   private tooltip?: Phaser.GameObjects.Text;
 
   constructor() {
@@ -21,9 +28,12 @@ export class CustomizationScene extends Phaser.Scene {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   init(data: { currentScore?: number } = {}) {
     this.upgradeManager = new UpgradeManager();
-    const totalScore = this.getTotalScore();
-    const totalSpent = this.upgradeManager.getTotalSpent();
-    this.currentScore = Math.max(0, totalScore - totalSpent);
+    this.skillTree = new SkillTreeManager();
+    void this.skillTree.initialize().then(() => {
+      this.recomputePoints();
+      this.updateAllDisplays();
+    });
+    this.recomputePoints();
   }
 
   create() {
@@ -49,16 +59,12 @@ export class CustomizationScene extends Phaser.Scene {
     // Character display area
     this.createCharacterDisplay();
 
-    // Stats and upgrade interface
-    this.createStatsInterface();
+    // Tabs and skill tree interface
+    this.createTabs();
+    this.createSkillTreeUI();
 
-    // Attempt to load remote upgrades and refresh UI when done
-    this.upgradeManager.loadFromRemote().then(() => {
-      const totalScore = this.getTotalScore();
-      const totalSpent = this.upgradeManager.getTotalSpent();
-      this.currentScore = Math.max(0, totalScore - totalSpent);
-      this.updateAllDisplays();
-    }).catch(() => {});
+    // Attempt to load remote legacy upgrades (migration support only, non-blocking)
+    this.upgradeManager.loadFromRemote().catch(() => {});
 
     // Control buttons
     this.createControlButtons();
@@ -111,109 +117,115 @@ export class CustomizationScene extends Phaser.Scene {
     });
   }
 
-  private createStatsInterface() {
+  private createTabs() {
     const rightSide = this.scale.width * 0.75;
-    const topArea = 200;
-
-    this.add.text(rightSide, topArea - 50, 'UPGRADES', {
-      fontSize: '24px',
-      color: '#ffffff',
-      fontStyle: 'bold'
-    }).setOrigin(0.5);
-
-    const upgradeStats = [
-      { key: 'health', label: 'Health', description: '+25 HP per level' },
-      { key: 'speed', label: 'Speed', description: '+20 speed per level' },
-      { key: 'maxAmmo', label: 'Max Ammo', description: '+2 ammo per level' },
-      { key: 'reloadSpeed', label: 'Reload Speed', description: '-150ms per level' },
-      { key: 'bulletSpeed', label: 'Bullet Speed', description: '+50 speed per level' },
-      { key: 'bulletDamage', label: 'Bullet Damage', description: '+1 damage per level' }
+    const topY = 130;
+    const labels: Array<{ spec: Specialization; text: string }> = [
+      { spec: 'basic', text: 'BASIC' },
+      { spec: 'special', text: 'SPECIAL' },
+      { spec: 'defense', text: 'DEFENSIVE' }
     ];
-
-    upgradeStats.forEach((stat, index) => {
-      const y = topArea + (index * 80);
-      this.createUpgradeRow(rightSide, y, stat.key as keyof UpgradeLevels, stat.label, stat.description);
+    const spacing = 160;
+    labels.forEach((l, i) => {
+      const t = this.add.text(rightSide - spacing + i * spacing, topY, l.text, {
+        fontSize: '22px',
+        color: this.selectedSpec === l.spec ? '#ffff00' : '#ffffff',
+        fontStyle: 'bold'
+      }).setOrigin(0.5)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+          this.selectedSpec = l.spec;
+          this.updateTabsStyle();
+          this.renderSkillTree();
+        });
+      this.tabTexts[l.spec] = t;
     });
   }
 
-  private createUpgradeRow(x: number, y: number, statKey: keyof UpgradeLevels, label: string, description: string) {
-    const levels = this.upgradeManager.getUpgradeLevels();
-    const maxLevel = 10; // From UpgradeManager
-    const cost = this.upgradeManager.getUpgradeCost(statKey);
-    const canUpgrade = this.upgradeManager.canUpgrade(statKey, this.currentScore);
-    const isMaxLevel = this.upgradeManager.isMaxLevel(statKey);
+  private updateTabsStyle() {
+    (['basic', 'special', 'defense'] as Specialization[]).forEach(spec => {
+      const t = this.tabTexts[spec];
+      if (t) t.setColor(this.selectedSpec === spec ? '#ffff00' : '#ffffff');
+    });
+  }
 
-    // Stat name and level
-    this.add.text(x - 150, y - 25, label, {
-      fontSize: '18px',
-      color: '#ffffff',
-      fontStyle: 'bold'
+  private createSkillTreeUI() {
+    const rightSide = this.scale.width * 0.75;
+    const topArea = 160;
+    this.add.text(rightSide, topArea - 20, 'SKILL TREE', {
+      fontSize: '24px', color: '#ffffff', fontStyle: 'bold'
     }).setOrigin(0.5);
+    this.renderSkillTree();
+  }
 
-    this.levelTexts[statKey] = this.add.text(x - 150, y, `Level ${levels[statKey]}/${maxLevel}`, {
-      fontSize: '14px',
-      color: '#cccccc'
-    }).setOrigin(0.5);
+  private clearSkillTreeUI() {
+    this.nodeContainers.forEach(c => c.destroy());
+    this.linkLines.forEach(g => g.destroy());
+    this.nodeContainers = [];
+    this.linkLines = [];
+  }
 
-    // Description
-    this.add.text(x - 150, y + 20, description, {
-      fontSize: '12px',
-      color: '#aaaaaa'
-    }).setOrigin(0.5);
+  private renderSkillTree() {
+    this.clearSkillTreeUI();
+    const nodes = this.skillTree.getNodes().filter(n => n.specialization === this.selectedSpec);
+    const originX = this.scale.width * 0.62;
+    const originY = 200;
+    const cellW = 220;
+    const cellH = 120;
 
-    // Cost and upgrade button + Buy Max
-    if (!isMaxLevel) {
-      this.costTexts[statKey] = this.add.text(x + 50, y - 10, `Cost: ${cost.toLocaleString()}`, {
-        fontSize: '14px',
-        color: canUpgrade ? '#ffff00' : '#ff0000'
-      }).setOrigin(0.5);
+    // Draw prerequisite links
+    const g = this.add.graphics();
+    g.lineStyle(2, 0x444444, 1);
+    for (const n of nodes) {
+      if (!n.prerequisites) continue;
+      n.prerequisites.forEach(p => {
+        const from = nodes.find(x => x.id === p.nodeId);
+        if (!from) return;
+        const x1 = originX + from.position.x * cellW;
+        const y1 = originY + from.position.y * cellH;
+        const x2 = originX + n.position.x * cellW;
+        const y2 = originY + n.position.y * cellH;
+        g.beginPath();
+        g.moveTo(x1, y1);
+        g.lineTo(x2, y2);
+        g.strokePath();
+      });
+    }
+    this.linkLines.push(g);
 
-      this.upgradeButtons[statKey] = this.add.text(x + 50, y + 15, 'UPGRADE', {
-        fontSize: '16px',
-        color: canUpgrade ? '#ffffff' : '#666666',
-        backgroundColor: canUpgrade ? '#004400' : '#444444',
-        padding: { x: 15, y: 5 }
-      }).setOrigin(0.5);
+    for (const n of nodes) {
+      const cx = originX + n.position.x * cellW;
+      const cy = originY + n.position.y * cellH;
+      const container = this.add.container(cx, cy);
+      const bg = this.add.rectangle(0, 0, 200, 90, 0x002244, 0.9).setStrokeStyle(2, 0xffffff, 0.6);
 
-      if (canUpgrade) {
-        this.upgradeButtons[statKey]
-          .setInteractive({ useHandCursor: true })
-          .on('pointerdown', (pointer: Phaser.Input.Pointer) => this.handleUpgrade(statKey, (pointer.event as KeyboardEvent | MouseEvent)?.shiftKey === true))
-          .on('pointerover', () => {
-            if (canUpgrade) {
-              this.upgradeButtons[statKey].setStyle({ backgroundColor: '#006600' });
-              this.showTooltip(x + 180, y + 15, statKey);
+      const rank = this.skillTree.getUnlocked(n.id);
+      const can = this.skillTree.canUnlock(n.id, this.currentScore);
+      const title = this.add.text(0, -20, n.title, { fontSize: '18px', color: can ? '#ffffaa' : '#dddddd', fontStyle: 'bold' }).setOrigin(0.5);
+      const rankText = this.add.text(0, 5, `Rank ${rank}/${n.maxRank}`, { fontSize: '14px', color: '#cccccc' }).setOrigin(0.5);
+      const btn = this.add.text(0, 28, can ? `UNLOCK (-${this.skillTree.getNextCost(n.id).toLocaleString()})` : (rank >= n.maxRank ? 'MAXED' : 'LOCKED'), {
+        fontSize: '14px', color: can ? '#ffffff' : '#888888', backgroundColor: can ? '#004400' : '#333333', padding: { x: 12, y: 4 }
+      }).setOrigin(0.5)
+        .on('pointerover', () => this.showNodeTooltip(n, cx + 110, cy))
+        .on('pointerout', () => this.hideTooltip());
+
+      if (can) {
+        btn.setInteractive({ useHandCursor: true })
+          .on('pointerdown', () => {
+            const res = this.skillTree.unlock(n.id, this.currentScore);
+            if (res.success) {
+              this.currentScore = res.newPoints;
+              this.updateAllDisplays();
             }
-          })
-          .on('pointerout', () => {
-            if (canUpgrade) {
-              this.upgradeButtons[statKey].setStyle({ backgroundColor: '#004400' });
-            }
-            this.hideTooltip();
           });
-
-        // Buy Max button
-        const buyMaxBtn = this.add.text(x + 150, y + 15, 'BUY MAX', {
-          fontSize: '14px',
-          color: canUpgrade ? '#ffffff' : '#888888',
-          backgroundColor: canUpgrade ? '#003366' : '#333333',
-          padding: { x: 10, y: 4 }
-        }).setOrigin(0.5);
-        if (canUpgrade) {
-          buyMaxBtn.setInteractive({ useHandCursor: true })
-            .on('pointerdown', () => this.handleUpgrade(statKey, true))
-            .on('pointerover', () => buyMaxBtn.setStyle({ backgroundColor: '#004c99' }))
-            .on('pointerout', () => buyMaxBtn.setStyle({ backgroundColor: '#003366' }));
-        }
       }
-    } else {
-      this.add.text(x + 50, y, 'MAX LEVEL', {
-        fontSize: '16px',
-        color: '#00ff00',
-        fontStyle: 'bold'
-      }).setOrigin(0.5);
+
+      container.add([bg, title, rankText, btn]);
+      this.nodeContainers.push(container);
     }
   }
+
+  // Legacy upgrade row removed in favor of skill tree UI
 
   private createControlButtons() {
     const centerX = this.scale.width / 2;
@@ -244,47 +256,32 @@ export class CustomizationScene extends Phaser.Scene {
       .on('pointerout', () => this.resetButton.setStyle({ backgroundColor: '#444400' }));
   }
 
-  private handleUpgrade(statKey: keyof UpgradeLevels, buyMax: boolean = false) {
-    let purchased = 0;
-    let totalCost = 0;
-    if (buyMax) {
-      // Attempt up to 5 levels or until points run out/maxed
-      for (let i = 0; i < 5; i++) {
-        const attempt = this.upgradeManager.upgrade(statKey, this.currentScore - totalCost);
-        if (!attempt.success) break;
-        purchased++;
-        totalCost += attempt.cost;
-      }
-    } else {
-      const res = this.upgradeManager.upgrade(statKey, this.currentScore);
-      if (res.success) {
-        purchased = 1;
-        totalCost = res.cost;
-      }
-    }
+  // Legacy upgrade handler removed in favor of skill tree
 
-    if (purchased > 0) {
-      const totalScore = this.getTotalScore();
-      const totalSpent = this.upgradeManager.getTotalSpent();
-      this.currentScore = Math.max(0, totalScore - totalSpent);
-      this.updateAllDisplays();
-      this.showUpgradeNotification(statKey, totalCost);
+  private showNodeTooltip(node: SkillNode, x: number, y: number) {
+    const rank = this.skillTree.getUnlocked(node.id);
+    const eff = node.effectPerRank(Math.max(1, Math.min(node.maxRank, rank + 1)));
+    const parts: string[] = [];
+    if (eff.stats) {
+      if (eff.stats.health) parts.push(`Health: ${eff.stats.health > 0 ? '+' : ''}${eff.stats.health}`);
+      if (eff.stats.speed) parts.push(`Speed: ${eff.stats.speed > 0 ? '+' : ''}${eff.stats.speed}`);
+      if (eff.stats.maxAmmo) parts.push(`Max Ammo: ${eff.stats.maxAmmo > 0 ? '+' : ''}${eff.stats.maxAmmo}`);
+      if (eff.stats.reloadSpeedMs) parts.push(`Reload: ${eff.stats.reloadSpeedMs}`);
+      if (eff.stats.bulletSpeed) parts.push(`Bullet Speed: ${eff.stats.bulletSpeed > 0 ? '+' : ''}${eff.stats.bulletSpeed}`);
+      if (eff.stats.bulletDamage) parts.push(`Bullet Damage: ${eff.stats.bulletDamage > 0 ? '+' : ''}${eff.stats.bulletDamage}`);
     }
-  }
-
-  private showTooltip(x: number, y: number, statKey: keyof UpgradeLevels) {
-    const stats = this.upgradeManager.getPlayerStats();
-    const inc = this.upgradeManager.getStatIncrease(statKey);
-    const nextCost = this.upgradeManager.getUpgradeCost(statKey);
-    const current = (stats as PlayerStats)[statKey as keyof PlayerStats] as number;
-    const next = statKey === 'reloadSpeed' ? Math.max(0, current - inc) : current + inc;
-    const lines = `Current: ${current}\nNext: ${next}\nCost: ${nextCost.toLocaleString()}\n(Shift+Click buys up to 5)`;
+    if (eff.modifiers) {
+      if (eff.modifiers.pierceCount) parts.push(`Pierce: +${eff.modifiers.pierceCount}`);
+      if (eff.modifiers.ricochetBounces) parts.push(`Ricochet: +${eff.modifiers.ricochetBounces}`);
+      if (eff.modifiers.damageReductionPct) parts.push(`DR: ${Math.round(eff.modifiers.damageReductionPct * 100)}%`);
+      if (eff.modifiers.healPerSecond) parts.push(`Regen: +${eff.modifiers.healPerSecond}/s`);
+      if (eff.modifiers.petDrone?.enabled) parts.push('Pet Drone');
+      if (eff.modifiers.shieldAfterIdle?.enabled) parts.push('Reactive Shield');
+    }
+    const lines = `${node.description}\nNext: ${parts.join(', ')}\nCost: ${this.skillTree.getNextCost(node.id).toLocaleString()}`;
     this.tooltip?.destroy();
     this.tooltip = this.add.text(x, y, lines, {
-      fontSize: '12px',
-      color: '#ffffee',
-      backgroundColor: '#000000',
-      padding: { x: 8, y: 6 }
+      fontSize: '12px', color: '#ffffee', backgroundColor: '#000000', padding: { x: 8, y: 6 }
     }).setOrigin(0, 0.5);
   }
 
@@ -320,6 +317,7 @@ export class CustomizationScene extends Phaser.Scene {
 
   private updateAllDisplays() {
     // Update score
+    this.recomputePoints();
     this.scoreText.setText(`Available Points: ${this.currentScore.toLocaleString()}`);
 
     // Update current stats
@@ -341,9 +339,8 @@ export class CustomizationScene extends Phaser.Scene {
       }
     });
 
-    // Recreate upgrade interface to update costs and availability
-    this.clearUpgradeInterface();
-    this.createStatsInterface();
+    // Re-render skill tree to refresh ranks and costs
+    this.renderSkillTree();
   }
 
   private clearUpgradeInterface() {
@@ -379,10 +376,8 @@ export class CustomizationScene extends Phaser.Scene {
     }).setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
-        this.upgradeManager.resetUpgrades();
-        const totalScore = this.getTotalScore();
-        const totalSpentAfter = this.upgradeManager.getTotalSpent();
-        this.currentScore = Math.max(0, totalScore - totalSpentAfter);
+        this.skillTree.reset();
+        this.recomputePoints();
         this.updateAllDisplays();
         confirmText.destroy();
         confirmButton.destroy();
@@ -423,6 +418,20 @@ export class CustomizationScene extends Phaser.Scene {
     });
     
     return totalScore;
+  }
+
+  private getTotalSpent(): number {
+    try {
+      return this.skillTree.getState().totalSpent;
+    } catch {
+      return this.upgradeManager.getTotalSpent();
+    }
+  }
+
+  private recomputePoints() {
+    const totalScore = this.getTotalScore();
+    const totalSpent = this.getTotalSpent();
+    this.currentScore = Math.max(0, totalScore - totalSpent);
   }
 
   private goBack() {

@@ -28,4 +28,15 @@ export default defineSchema({
     }),
     updatedAt: v.number()
   }).index('by_device', ['deviceId'])
+  ,
+  skillTrees: defineTable({
+    userKey: v.string(),
+    state: v.object({
+      version: v.number(),
+      unlocked: v.record(v.string(), v.number()),
+      totalSpent: v.number(),
+      updatedAt: v.number()
+    }),
+    updatedAt: v.number()
+  }).index('by_user', ['userKey'])
 })
