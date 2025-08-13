@@ -7,6 +7,7 @@ import { GameUI } from '../ui/GameUI';
 import { ReloadingBar } from '../ui/ReloadingBar';
 import { WaveManager } from '../systems/WaveManager';
 import { UpgradeManager } from '../systems/UpgradeManager';
+import { Drone } from '../objects/Drone';
 
 export class WaveScene extends Phaser.Scene {
   private player!: Player;
@@ -41,6 +42,7 @@ export class WaveScene extends Phaser.Scene {
   private bossIntroText?: Phaser.GameObjects.Text;
   private bossCountdownText?: Phaser.GameObjects.Text;
   private bossIntroTimers: Phaser.Time.TimerEvent[] = [];
+  private drone?: Drone;
 
   constructor() {
     super({ key: 'WaveScene' });
@@ -171,6 +173,8 @@ export class WaveScene extends Phaser.Scene {
       defaultKey: 'bullet',
       maxSize: Math.max(playerStats.maxAmmo, GAME_SETTINGS.weapons.bullet.maxAmmo)
     });
+    // Add custom properties for pierce/ricochet
+    // Type augmentation via casting where used
   }
 
   private createEnemies() {
@@ -226,6 +230,12 @@ export class WaveScene extends Phaser.Scene {
     } else {
       this.showWaveNotification();
       this.setupSpawnTimer();
+    }
+    // Spawn pet drone if skill is enabled
+    const mods = this.upgradeManager.getModifiers();
+    if (mods.petDrone?.enabled) {
+      this.drone?.destroy();
+      this.drone = new Drone(this, this.player, (x: number, y: number) => this.fireDroneBullet(x, y));
     }
   }
 
@@ -645,7 +655,7 @@ export class WaveScene extends Phaser.Scene {
   }
 
   private handleBulletEnemyCollision(bullet: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile, enemy: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile) {
-    const bulletObj = bullet as Phaser.GameObjects.Sprite;
+    const bulletObj = bullet as Phaser.GameObjects.Sprite & { pierceLeft?: number, bounceLeft?: number };
     const enemyObj = enemy as Enemy;
 
     if (!bulletObj.active || !enemyObj.active) return;
@@ -659,12 +669,29 @@ export class WaveScene extends Phaser.Scene {
       }
     }
 
-    const b = bulletObj as Phaser.GameObjects.Sprite & { body?: Phaser.Physics.Arcade.Body, ttlEvent?: Phaser.Time.TimerEvent };
-    if (b.ttlEvent) { b.ttlEvent.remove(false); b.ttlEvent = undefined; }
-    if (b.body) {
-      b.body.velocity.set(0, 0);
+    const b = bulletObj as Phaser.GameObjects.Sprite & { body?: Phaser.Physics.Arcade.Body, ttlEvent?: Phaser.Time.TimerEvent, pierceLeft?: number, bounceLeft?: number };
+    const hadPierce = (b.pierceLeft ?? 0) > 0;
+    if (hadPierce) {
+      b.pierceLeft = (b.pierceLeft ?? 0) - 1;
+      // Keep bullet active; small nudge to continue
+      if (b.body) {
+        b.body.velocity.scale(1.0);
+      }
+    } else if ((b.bounceLeft ?? 0) > 0) {
+      // Simple ricochet: invert velocity slightly randomized
+      if (b.body) {
+        b.bounceLeft = (b.bounceLeft ?? 0) - 1;
+        b.body.velocity.set(-b.body.velocity.x, -b.body.velocity.y);
+        const jitter = 0.2;
+        b.body.velocity.rotate(Phaser.Math.FloatBetween(-jitter, jitter));
+      }
+    } else {
+      if (b.ttlEvent) { b.ttlEvent.remove(false); b.ttlEvent = undefined; }
+      if (b.body) {
+        b.body.velocity.set(0, 0);
+      }
+      b.setActive(false).setVisible(false);
     }
-    b.setActive(false).setVisible(false);
     const playerStats = this.upgradeManager.getPlayerStats();
     const isDead = enemyObj.takeDamage(playerStats.bulletDamage);
     if (isDead) {
@@ -788,7 +815,7 @@ export class WaveScene extends Phaser.Scene {
     const spawnX = this.player.x + dirX * spawnOffset;
     const spawnY = this.player.y + dirY * spawnOffset;
 
-    const bullet = this.bullets.get(spawnX, spawnY) as (Phaser.GameObjects.Sprite & { body?: Phaser.Physics.Arcade.Body, ttlEvent?: Phaser.Time.TimerEvent }) | null;
+    const bullet = this.bullets.get(spawnX, spawnY) as (Phaser.GameObjects.Sprite & { body?: Phaser.Physics.Arcade.Body, ttlEvent?: Phaser.Time.TimerEvent, pierceLeft?: number, bounceLeft?: number }) | null;
     if (bullet) {
       bullet.setActive(true).setVisible(true);
       const playerStats = this.upgradeManager.getPlayerStats();
@@ -806,6 +833,11 @@ export class WaveScene extends Phaser.Scene {
         bullet.ttlEvent = undefined;
       });
 
+      // Apply pierce/ricochet from skill tree
+      const mods = this.upgradeManager.getModifiers();
+      bullet.pierceLeft = Math.max(0, mods.pierceCount || 0);
+      bullet.bounceLeft = Math.max(0, mods.ricochetBounces || 0);
+
       this.ammo--;
       this.gameUI.updateAmmo(this.ammo);
 
@@ -813,6 +845,48 @@ export class WaveScene extends Phaser.Scene {
         this.reload();
       }
     }
+  }
+
+  private fireDroneBullet(x: number, y: number) {
+    const target = this.getNearestEnemy(x, y);
+    if (!target) return;
+    const dx = (target as Phaser.GameObjects.Sprite).x - x;
+    const dy = (target as Phaser.GameObjects.Sprite).y - y;
+    const len = Math.hypot(dx, dy) || 1;
+    const dirX = dx / len;
+    const dirY = dy / len;
+    const bullet = this.bullets.get(x, y) as (Phaser.GameObjects.Sprite & { body?: Phaser.Physics.Arcade.Body, ttlEvent?: Phaser.Time.TimerEvent, pierceLeft?: number, bounceLeft?: number, fromDrone?: boolean }) | null;
+    if (!bullet) return;
+    bullet.setActive(true).setVisible(true);
+    // Tag as drone-origin using Phaser's Data Manager if available
+    const asObj = bullet as unknown as { setData?: (k: string, v: unknown) => void }
+    if (typeof asObj.setData === 'function') {
+      asObj.setData('fromDrone', true)
+    }
+    if (bullet.body) {
+      bullet.body.velocity.set(dirX * 350, dirY * 350);
+    }
+    bullet.ttlEvent?.remove(false);
+    bullet.ttlEvent = this.time.delayedCall(2000, () => {
+      if (bullet.active) bullet.setActive(false).setVisible(false);
+      bullet.ttlEvent = undefined;
+    });
+    bullet.pierceLeft = 0;
+    bullet.bounceLeft = 0;
+  }
+
+  private getNearestEnemy(x: number, y: number): Phaser.GameObjects.GameObject | null {
+    if (!this.enemies) return null;
+    let best: Phaser.GameObjects.GameObject | null = null;
+    let bestDist = Infinity;
+    for (const enemy of this.enemies.getMatching('active', true)) {
+      const es = enemy as Phaser.GameObjects.Sprite;
+      const dx = es.x - x;
+      const dy = es.y - y;
+      const d2 = dx*dx + dy*dy;
+      if (d2 < bestDist) { best = es; bestDist = d2; }
+    }
+    return best;
   }
 
   private reload() {

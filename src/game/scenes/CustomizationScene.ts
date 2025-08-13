@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { UpgradeManager, UpgradeLevels, PlayerStats } from '../systems/UpgradeManager';
+import { UpgradeManager, UpgradeLevels } from '../systems/UpgradeManager';
 import { SkillTreeManager, SkillNode, Specialization } from '../systems/SkillTreeManager';
 
 export class CustomizationScene extends Phaser.Scene {
