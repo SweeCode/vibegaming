@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Snacks counter in the in-game HUD (both Classic and Wave modes) so pet currency is visible during play
+
+### Fixed
+- Pet upgrades screen now shows upgrade rows with level, cost, and BUY buttons and updates Snacks balance on purchase
+- Snacks HUD refreshes after boss defeats that award snacks
+
 ### Changed
 - Boss waves now have a cinematic intro on all boss waves (warning typewriter + 3-2-1 countdown with camera shakes) replacing the normal wave banner on boss waves
 - Shooter boss volley increased from 5 to 7 shots; bullets flagged as boss-origin for damage scaling

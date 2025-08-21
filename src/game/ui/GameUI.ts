@@ -7,6 +7,7 @@ export class GameUI {
   private ammoText!: Phaser.GameObjects.Text;
   private timerText!: Phaser.GameObjects.Text;
   private difficultyText!: Phaser.GameObjects.Text;
+  private snacksText!: Phaser.GameObjects.Text;
   private healthBar!: Phaser.GameObjects.Graphics;
   private healthText!: Phaser.GameObjects.Text;
   private gameOverText?: Phaser.GameObjects.Text;
@@ -15,6 +16,8 @@ export class GameUI {
   private retryButton?: Phaser.GameObjects.Text;
   private menuButton?: Phaser.GameObjects.Text;
   private saveScoreButton?: Phaser.GameObjects.Text;
+  private droneIndicator?: Phaser.GameObjects.Text;
+  private shieldIndicator?: Phaser.GameObjects.Text;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -42,6 +45,12 @@ export class GameUI {
       fontSize: '24px',
       color: '#00ff00'
     });
+
+    // Snacks counter (updated by scenes)
+    this.snacksText = this.scene.add.text(16, 152, 'Snacks: --', {
+      fontSize: '24px',
+      color: '#ffff66'
+    });
     
     // ESC instruction
     this.scene.add.text(16, this.scene.scale.height - 40, 'Press ESC to return to menu', {
@@ -59,6 +68,19 @@ export class GameUI {
     });
     
     this.updateHealthBar(1); // Health bar will position itself at bottom
+
+    // Indicators (top-right)
+    const margin = 16;
+    const ix = this.scene.scale.width - margin;
+    const iy = 16;
+    this.droneIndicator = this.scene.add.text(ix, iy, '', {
+      fontSize: '16px',
+      color: '#aeefff'
+    }).setOrigin(1, 0).setAlpha(0);
+    this.shieldIndicator = this.scene.add.text(ix, iy + 20, '', {
+      fontSize: '16px',
+      color: '#aaffaa'
+    }).setOrigin(1, 0).setAlpha(0);
   }
 
   updateScore(score: number) {
@@ -121,6 +143,10 @@ export class GameUI {
     const healthText = `${Math.ceil(healthPercentage * 100)}%`;
     this.healthText.setText(healthText);
     this.healthText.setPosition(xPosition + barWidth + 10, yPosition + (barHeight / 2) - 8); // Center vertically next to bar
+  }
+
+  updateSnacks(count: number) {
+    this.snacksText.setText(`Snacks: ${count}`);
   }
 
   showGameOver(onRetry?: () => void, onMenu?: () => void, onSave?: () => void) {
@@ -237,5 +263,26 @@ export class GameUI {
     this.updateTimer(0);
     this.updateDifficulty(1, 'Beginner');
     this.updateHealthBar(1);
+    // Hide indicators
+    this.droneIndicator?.setAlpha(0).setText('');
+    this.shieldIndicator?.setAlpha(0).setText('');
+  }
+
+  setDroneActive(active: boolean) {
+    if (!this.droneIndicator) return;
+    if (active) {
+      this.droneIndicator.setText('DRONE').setAlpha(1);
+    } else {
+      this.droneIndicator.setAlpha(0).setText('');
+    }
+  }
+
+  setShieldActive(active: boolean) {
+    if (!this.shieldIndicator) return;
+    if (active) {
+      this.shieldIndicator.setText('SHIELD').setAlpha(1);
+    } else {
+      this.shieldIndicator.setAlpha(0).setText('');
+    }
   }
 }

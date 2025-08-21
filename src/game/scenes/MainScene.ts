@@ -6,6 +6,9 @@ import { GameUI } from '../ui/GameUI';
 import { ReloadingBar } from '../ui/ReloadingBar';
 import { DifficultyManager } from '../systems/DifficultyManager';
 import { UpgradeManager } from '../systems/UpgradeManager';
+import { Drone } from '../objects/Drone';
+import { loadPetSettings } from '../systems/petSettings';
+import { getBulletSpeedMultiplier, getBulletSizeMultiplier, getSnacks } from '../systems/petUpgrades';
 
 export class MainScene extends Phaser.Scene {
   private player!: Player;
@@ -16,6 +19,7 @@ export class MainScene extends Phaser.Scene {
   private reloadingBar!: ReloadingBar;
   private difficultyManager!: DifficultyManager;
   private upgradeManager!: UpgradeManager;
+  private drone?: Drone;
   private score = 0;
   private ammo = GAME_SETTINGS.weapons.bullet.maxAmmo;
   private maxAmmo = GAME_SETTINGS.weapons.bullet.maxAmmo;
@@ -33,6 +37,7 @@ export class MainScene extends Phaser.Scene {
     if (this.spawnTimer) {
       this.spawnTimer.destroy();
     }
+    if (this.drone) { this.drone.destroy(); this.drone = undefined; }
   }
 
   preload() {
@@ -54,6 +59,14 @@ export class MainScene extends Phaser.Scene {
     this.setupSpawnTimer();
     this.setupMouseInput();
     this.setupKeyboardInput();
+
+    // Spawn pet drone if enabled
+    const mods = this.upgradeManager.getModifiers();
+    if (mods.petDrone?.enabled) {
+      const settings = loadPetSettings(mods);
+      this.drone?.destroy();
+      this.drone = new Drone(this, this.player, (x: number, y: number) => this.fireDroneBullet(x, y, settings.damage), settings.fireRateMs);
+    }
   }
 
   private initializePlayerStats() {
@@ -67,8 +80,12 @@ export class MainScene extends Phaser.Scene {
 
     this.updateBullets();
     this.updateEnemies(); // Add enemy cleanup
+    if (this.drone) this.drone.update(this.time.now);
     if (this.player) this.player.update();
     if (this.reloadingBar) this.reloadingBar.update();
+    // UI indicators
+    this.gameUI.setDroneActive(!!this.drone);
+    this.gameUI.setShieldActive(this.player?.hasShield?.() === true);
     this.updateTimer(); // Update timer display
   }
 
@@ -149,6 +166,7 @@ export class MainScene extends Phaser.Scene {
   private createUI() {
     this.gameUI = new GameUI(this);
     this.gameUI.updateAmmo(this.ammo);
+    this.gameUI.updateSnacks(getSnacks());
   }
 
   private createReloadingBar() {
@@ -195,16 +213,44 @@ export class MainScene extends Phaser.Scene {
   }
 
   private handleBulletEnemyCollision(bullet: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile, enemy: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile) {
-    const bulletObj = bullet as Phaser.GameObjects.Sprite;
+    const bulletObj = bullet as Phaser.GameObjects.Sprite & { pierceLeft?: number, bounceLeft?: number };
     const enemyObj = enemy as Enemy;
 
     // Don't process if bullet is already inactive or enemy is already destroyed
     if (!bulletObj.active || !enemyObj.active) return;
 
-    bulletObj.setActive(false).setVisible(false);
-    
+    const b = bulletObj as Phaser.GameObjects.Sprite & { body?: Phaser.Physics.Arcade.Body, ttlEvent?: Phaser.Time.TimerEvent, pierceLeft?: number, bounceLeft?: number };
+    const hadPierce = (b.pierceLeft ?? 0) > 0;
+    if (hadPierce) {
+      b.pierceLeft = (b.pierceLeft ?? 0) - 1;
+      if (b.body) b.body.velocity.scale(1.0);
+    } else if ((b.bounceLeft ?? 0) > 0) {
+      if (b.body) {
+        b.bounceLeft = (b.bounceLeft ?? 0) - 1;
+        const bx = (bulletObj as unknown as { x?: number }).x ?? 0;
+        const by = (bulletObj as unknown as { y?: number }).y ?? 0;
+        const target = this.getNearestEnemy(bx, by);
+        if (target) {
+          const ts = target as Phaser.GameObjects.Sprite;
+          const dx = ts.x - bx;
+          const dy = ts.y - by;
+          const len = Math.hypot(dx, dy) || 1;
+          const speed = b.body.velocity.length();
+          b.body.velocity.set((dx / len) * speed, (dy / len) * speed);
+        } else {
+          b.body.velocity.set(-b.body.velocity.x, -b.body.velocity.y);
+          b.body.velocity.rotate(Phaser.Math.FloatBetween(-0.2, 0.2));
+        }
+      }
+    } else {
+      b.setActive(false).setVisible(false);
+    }
+
     const playerStats = this.upgradeManager.getPlayerStats();
-    const isDead = enemyObj.takeDamage(playerStats.bulletDamage);
+    const fromDrone = (bulletObj as unknown as { getData?: (k: string) => unknown }).getData?.('fromDrone') === true;
+    const customDroneDmg = (bulletObj as unknown as { getData?: (k: string) => unknown }).getData?.('droneDamage');
+    const dmg = fromDrone ? Math.max(1, Math.ceil((typeof customDroneDmg === 'number' ? customDroneDmg : playerStats.bulletDamage * 0.5))) : playerStats.bulletDamage;
+    const isDead = enemyObj.takeDamage(dmg);
     if (isDead) {
       this.score += enemyObj.getScoreValue();
       // Split behavior: if splitter, spawn minis
@@ -302,7 +348,7 @@ export class MainScene extends Phaser.Scene {
     const spawnX = this.player.x + dirX * spawnOffset;
     const spawnY = this.player.y + dirY * spawnOffset;
 
-    const bullet = this.bullets.get(spawnX, spawnY) as (Phaser.GameObjects.Sprite & { body?: Phaser.Physics.Arcade.Body, ttlEvent?: Phaser.Time.TimerEvent }) | null;
+    const bullet = this.bullets.get(spawnX, spawnY) as (Phaser.GameObjects.Sprite & { body?: Phaser.Physics.Arcade.Body, ttlEvent?: Phaser.Time.TimerEvent, pierceLeft?: number, bounceLeft?: number }) | null;
     if (bullet) {
       bullet.setActive(true).setVisible(true);
       const playerStats = this.upgradeManager.getPlayerStats();
@@ -319,6 +365,11 @@ export class MainScene extends Phaser.Scene {
         bullet.ttlEvent = undefined;
       });
 
+      // Apply pierce/ricochet from skill tree
+      const mods = this.upgradeManager.getModifiers();
+      bullet.pierceLeft = Math.max(0, mods.pierceCount || 0);
+      bullet.bounceLeft = Math.max(0, mods.ricochetBounces || 0);
+
       this.ammo--;
       this.gameUI.updateAmmo(this.ammo);
 
@@ -326,6 +377,52 @@ export class MainScene extends Phaser.Scene {
         this.reload();
       }
     }
+  }
+
+  private fireDroneBullet(x: number, y: number, damage: number) {
+    const target = this.getNearestEnemy(x, y);
+    if (!target) return;
+    const dx = (target as Phaser.GameObjects.Sprite).x - x;
+    const dy = (target as Phaser.GameObjects.Sprite).y - y;
+    const len = Math.hypot(dx, dy) || 1;
+    const dirX = dx / len;
+    const dirY = dy / len;
+    const bullet = this.bullets.get(x, y) as (Phaser.GameObjects.Sprite & { body?: Phaser.Physics.Arcade.Body, ttlEvent?: Phaser.Time.TimerEvent }) | null;
+    if (!bullet) return;
+    bullet.setActive(true).setVisible(true);
+    const asObj = bullet as unknown as { setData?: (k: string, v: unknown) => void }
+    if (typeof asObj.setData === 'function') asObj.setData('fromDrone', true)
+    // Apply pet bullet speed upgrade
+    {
+      const mult = Math.max(0.5, getBulletSpeedMultiplier())
+      if (bullet.body) bullet.body.velocity.set(dirX * 350 * mult, dirY * 350 * mult);
+    }
+    bullet.ttlEvent?.remove(false);
+    bullet.ttlEvent = this.time.delayedCall(2000, () => {
+      if (bullet.active) bullet.setActive(false).setVisible(false);
+      bullet.ttlEvent = undefined;
+    });
+    const asObj2 = bullet as unknown as { setData?: (k: string, v: unknown) => void }
+    if (typeof asObj2.setData === 'function') asObj2.setData('droneDamage', damage)
+    // Apply size multiplier visually
+    {
+      const s = Math.max(0.5, getBulletSizeMultiplier())
+      bullet.setScale(s)
+    }
+  }
+
+  private getNearestEnemy(x: number, y: number): Phaser.GameObjects.GameObject | null {
+    if (!this.enemies) return null;
+    let best: Phaser.GameObjects.GameObject | null = null;
+    let bestDist = Infinity;
+    for (const enemy of this.enemies.getMatching('active', true)) {
+      const es = enemy as Phaser.GameObjects.Sprite;
+      const dx = es.x - x;
+      const dy = es.y - y;
+      const d2 = dx*dx + dy*dy;
+      if (d2 < bestDist) { best = es; bestDist = d2; }
+    }
+    return best;
   }
 
   private reload() {
@@ -476,12 +573,14 @@ export class MainScene extends Phaser.Scene {
     this.player.setPosition(this.scale.width / 2, this.scale.height / 2);
     this.player.reset();
     this.gameUI.reset();
+    this.gameUI.updateSnacks(getSnacks());
     this.gameUI.hideLeaderboard();
     this.reloadingBar.hide(); // Hide reloading bar if it's showing
     this.difficultyManager.reset(); // Reset difficulty
     
     this.enemies.clear(true, true);
     this.bullets.clear(true, true);
+    if (this.drone) { this.drone.destroy(); this.drone = undefined; }
     
     // Reset spawn timer to initial difficulty
     const difficulty = this.difficultyManager.getCurrentSettings();

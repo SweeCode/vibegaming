@@ -3,11 +3,13 @@ import { IS_DEV } from '../config/gameConfig';
 import { GAME_SETTINGS } from '../config/gameConfig';
 import { Player } from '../objects/Player';
 import { Enemy, EnemySpawner, MiniEnemy, Boss, SentinelBoss, ArtilleryBoss } from '../objects/Enemy';
+import { addSnacks, getSnacks } from '../systems/petUpgrades';
 import { GameUI } from '../ui/GameUI';
 import { ReloadingBar } from '../ui/ReloadingBar';
 import { WaveManager } from '../systems/WaveManager';
 import { UpgradeManager } from '../systems/UpgradeManager';
 import { Drone } from '../objects/Drone';
+import { loadPetSettings } from '../systems/petSettings';
 
 export class WaveScene extends Phaser.Scene {
   private player!: Player;
@@ -94,6 +96,7 @@ export class WaveScene extends Phaser.Scene {
 
     this.updateBullets();
     this.updateEnemies();
+    if (this.drone) this.drone.update(this.time.now);
     // If boss exists, do not count off-screen enemies toward wave progress
     if (this.boss && this.boss.active) {
       // Ensure boss AI/movement runs
@@ -101,6 +104,9 @@ export class WaveScene extends Phaser.Scene {
     }
     if (this.player) this.player.update();
     if (this.reloadingBar) this.reloadingBar.update();
+    // UI indicators
+    this.gameUI.setDroneActive(!!this.drone);
+    this.gameUI.setShieldActive(this.player?.hasShield?.() === true);
     this.updateTimer();
     this.updateWaveSystem();
   }
@@ -189,6 +195,7 @@ export class WaveScene extends Phaser.Scene {
   private createUI() {
     this.gameUI = new GameUI(this);
     this.gameUI.updateAmmo(this.ammo);
+    this.gameUI.updateSnacks(getSnacks());
   }
 
   private createReloadingBar() {
@@ -235,8 +242,9 @@ export class WaveScene extends Phaser.Scene {
     // Spawn pet drone if skill is enabled
     const mods = this.upgradeManager.getModifiers();
     if (mods.petDrone?.enabled) {
+      const settings = loadPetSettings(mods);
       this.drone?.destroy();
-      this.drone = new Drone(this, this.player, (x: number, y: number) => this.fireDroneBullet(x, y));
+      this.drone = new Drone(this, this.player, (x: number, y: number) => this.fireDroneBullet(x, y, settings.damage), settings.fireRateMs);
     }
   }
 
@@ -541,6 +549,9 @@ export class WaveScene extends Phaser.Scene {
     this.updateBossHealthUI();
     if (dead) {
       this.score += (this.boss as Boss).getScoreValue();
+      // Reward snacks for defeating a boss
+      addSnacks(1);
+      this.gameUI.updateSnacks(getSnacks());
       this.cleanupBoss();
       this.cameras.main.shake(200, 0.01);
       this.waveManager.startBreak();
@@ -705,7 +716,8 @@ export class WaveScene extends Phaser.Scene {
     }
     const playerStats = this.upgradeManager.getPlayerStats();
     const fromDrone = (bulletObj as unknown as { getData?: (k: string) => unknown }).getData?.('fromDrone') === true;
-    const dmg = fromDrone ? Math.max(1, Math.ceil(playerStats.bulletDamage * 0.5)) : playerStats.bulletDamage;
+    const customDroneDmg = (bulletObj as unknown as { getData?: (k: string) => unknown }).getData?.('droneDamage');
+    const dmg = fromDrone ? Math.max(1, Math.ceil((typeof customDroneDmg === 'number' ? customDroneDmg : playerStats.bulletDamage * 0.5))) : playerStats.bulletDamage;
     const isDead = enemyObj.takeDamage(dmg);
     if (isDead) {
       this.score += enemyObj.getScoreValue();
@@ -860,7 +872,7 @@ export class WaveScene extends Phaser.Scene {
     }
   }
 
-  private fireDroneBullet(x: number, y: number) {
+  private fireDroneBullet(x: number, y: number, damage: number) {
     const target = this.getNearestEnemy(x, y);
     if (!target) return;
     const dx = (target as Phaser.GameObjects.Sprite).x - x;
@@ -886,6 +898,10 @@ export class WaveScene extends Phaser.Scene {
     });
     bullet.pierceLeft = 0;
     bullet.bounceLeft = 0;
+    const asObj2 = bullet as unknown as { setData?: (k: string, v: unknown) => void }
+    if (typeof asObj2.setData === 'function') {
+      asObj2.setData('droneDamage', damage)
+    }
   }
 
   private getNearestEnemy(x: number, y: number): Phaser.GameObjects.GameObject | null {
@@ -983,12 +999,13 @@ export class WaveScene extends Phaser.Scene {
     this.player.setPosition(this.scale.width / 2, this.scale.height / 2);
     this.player.reset();
     this.gameUI.reset();
+    this.gameUI.updateSnacks(getSnacks());
     this.reloadingBar.hide();
     this.waveManager.reset();
 
     this.enemies.clear(true, true);
     this.bullets.clear(true, true);
-
+    if (this.drone) { this.drone.destroy(); this.drone = undefined; }
     if (this.spawnTimer) this.spawnTimer.destroy();
     if (this.breakTimer) this.breakTimer.destroy();
     // Clear enemy bullets as well
