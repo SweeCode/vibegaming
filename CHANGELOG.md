@@ -11,6 +11,8 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 - Pet upgrades screen now shows upgrade rows with level, cost, and BUY buttons and updates Snacks balance on purchase
 - Snacks HUD refreshes after boss defeats that award snacks
+- Leaderboard UI issues: buttons now appear above background, removed duplicate header text
+- Leaderboard positioning: moved below mode switching buttons for full visibility
 
 ### Changed
 - Boss waves now have a cinematic intro on all boss waves (warning typewriter + 3-2-1 countdown with camera shakes) replacing the normal wave banner on boss waves
@@ -25,6 +27,7 @@ All notable changes to this project will be documented in this file.
 - Wave logging and debug logs gated behind IS_DEV only
 - Start menu redesigned with 2D shooter boss theme: parallax starfields, drifting enemy silhouettes, periodic boss flash, scanlines, and pulsing title
 - Added WebAudio unlock handler to resume audio after first user gesture and silence autoplay warnings in production
+- Leaderboard layout improved: resized panel for better proportions and more entries visible
 
 ## [1.0.0] - 2024-01-XX
 
