@@ -12,7 +12,6 @@ export class StartMenuScene extends Phaser.Scene {
   private leaderboardDisplay?: Phaser.GameObjects.Text;
   private leaderboardContainer?: Phaser.GameObjects.Container;
   private leaderboardScrollY: number = 0;
-  private leaderboardHeader?: Phaser.GameObjects.Text;
   private leaderboardBg?: Phaser.GameObjects.Rectangle;
   private leaderboardMaskShape?: Phaser.GameObjects.Rectangle;
   private leaderboardHeaderRow?: Phaser.GameObjects.Container;
@@ -257,6 +256,7 @@ export class StartMenuScene extends Phaser.Scene {
       padding: { x: 20, y: 10 }
     }).setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
+      .setDepth(1000) // Ensure buttons are above leaderboard background
       .on('pointerdown', () => { if (this.currentLeaderboardMode !== 'endless') this.showSpecificLeaderboard('endless'); }, this)
       .on('pointerover', () => this.classicButton?.setStyle({ backgroundColor: '#006600' }))
       .on('pointerout', () => this.classicButton?.setStyle({ 
@@ -271,6 +271,7 @@ export class StartMenuScene extends Phaser.Scene {
       padding: { x: 20, y: 10 }
     }).setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
+      .setDepth(1000) // Ensure buttons are above leaderboard background
       .on('pointerdown', () => { if (this.currentLeaderboardMode !== 'wave') this.showSpecificLeaderboard('wave'); }, this)
       .on('pointerover', () => this.waveButton?.setStyle({ backgroundColor: '#660066' }))
       .on('pointerout', () => this.waveButton?.setStyle({ 
@@ -279,13 +280,14 @@ export class StartMenuScene extends Phaser.Scene {
 
     // Back button below the list (create once)
     if (!this.backButton) {
-      this.backButton = this.add.text(centerX, centerY + 220, 'BACK', {
+      this.backButton = this.add.text(centerX, centerY + 280, 'BACK', { // Moved down from +220 to +280
         fontSize: '24px',
         color: '#ffffff',
         backgroundColor: '#660000',
         padding: { x: 20, y: 10 }
       }).setOrigin(0.5)
         .setInteractive({ useHandCursor: true })
+        .setDepth(1000) // Ensure back button is above leaderboard background
         .on('pointerdown', this.hideLeaderboard, this)
         .on('pointerover', () => this.backButton?.setStyle({ backgroundColor: '#880000' }))
         .on('pointerout', () => this.backButton?.setStyle({ backgroundColor: '#660000' }));
@@ -335,18 +337,14 @@ export class StartMenuScene extends Phaser.Scene {
     }
     if (IS_DEV) console.log(`${mode} leaderboard data:`, scores);
 
-    // Header
-    if (this.leaderboardHeader) { this.leaderboardHeader.destroy(); this.leaderboardHeader = undefined; }
-    this.leaderboardHeader = this.add.text(this.scale.width / 2, this.scale.height / 2 - 140, `${mode.toUpperCase()} MODE LEADERBOARD`, {
-      fontSize: '28px', color: '#ffffff', fontStyle: 'bold'
-    }).setOrigin(0.5);
+    // Header - removed duplicate text since we already have "SELECT LEADERBOARD" at the top
 
-    // Panel and container
+    // Panel and container - moved down to be fully below mode buttons
     const listX = this.scale.width / 2;
-    const listY = this.scale.height / 2 + 10;
-    const rowHeight = 28;
-    const panelWidth = Math.min(this.scale.width * 0.8, 900);
-    const panelHeight = 340;
+    const listY = this.scale.height / 2 + 80; // Moved down from +10 to +80
+    const rowHeight = 24; // Slightly smaller rows to fit more
+    const panelWidth = Math.min(this.scale.width * 0.85, 950); // Slightly wider
+    const panelHeight = 280; // Reduced height to fit better
     const maxVisible = Math.floor(panelHeight / rowHeight);
 
     if (this.leaderboardBg) { this.leaderboardBg.destroy(); this.leaderboardBg = undefined; }
@@ -451,13 +449,14 @@ export class StartMenuScene extends Phaser.Scene {
 
     // Back button (only create once)
     if (!this.backButton) {
-      this.backButton = this.add.text(this.scale.width / 2, this.scale.height / 2 + 200, 'BACK', {
+      this.backButton = this.add.text(this.scale.width / 2, this.scale.height / 2 + 280, 'BACK', { // Moved down from +200 to +280
         fontSize: '24px',
         color: '#ffffff',
         backgroundColor: '#660000',
         padding: { x: 20, y: 10 }
       }).setOrigin(0.5)
         .setInteractive({ useHandCursor: true })
+        .setDepth(1000) // Ensure back button is above leaderboard background
         .on('pointerdown', this.hideLeaderboard, this)
         .on('pointerover', () => this.backButton?.setStyle({ backgroundColor: '#880000' }))
         .on('pointerout', () => this.backButton?.setStyle({ backgroundColor: '#660000' }));
@@ -479,7 +478,6 @@ export class StartMenuScene extends Phaser.Scene {
     this.input.keyboard?.removeAllListeners();
     this.currentLeaderboardMode = 'endless';
 
-    if (this.leaderboardHeader) { this.leaderboardHeader.destroy(); this.leaderboardHeader = undefined; }
     if (this.leaderboardBg) { this.leaderboardBg.destroy(); this.leaderboardBg = undefined; }
     if (this.leaderboardMaskShape) { this.leaderboardMaskShape.destroy(); this.leaderboardMaskShape = undefined; }
     if (this.leaderboardHeaderRow) { this.leaderboardHeaderRow.destroy(true); this.leaderboardHeaderRow = undefined; }
