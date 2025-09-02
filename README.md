@@ -78,6 +78,15 @@ npm start
 - 3-second breaks between waves
 - Increasing enemy counts and variety
 - Clear objectives per wave
+- **Boss Battles**: Epic boss encounters every 5 waves with cinematic intros and spawn previews
+
+### Boss Battles
+- **Sentinel Boss**: Red-colored boss with rapid-fire attacks
+- **Artillery Boss**: Cyan-colored boss with devastating salvos
+- **Cinematic Intros**: Warning messages with typewriter effects
+- **Spawn Previews**: Visual flash effects showing exact boss spawn location
+- **Countdown System**: Dramatic 3-2-1 countdown with camera shakes
+- **Boss Schedule**: Every 5th wave (waves 5, 10, 15, etc.)
 
 ### Upgrade System
 1. **Earn Points**: Play either game mode to earn score points

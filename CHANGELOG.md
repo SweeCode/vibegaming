@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 - Snacks counter in the in-game HUD (both Classic and Wave modes) so pet currency is visible during play
+- Boss spawn preview with flash effects during countdown - shows exact spawn location with boss-specific colors
 
 ### Fixed
 - Pet upgrades screen now shows upgrade rows with level, cost, and BUY buttons and updates Snacks balance on purchase
