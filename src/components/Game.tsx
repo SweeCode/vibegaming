@@ -26,12 +26,34 @@ const Game = () => {
       parent: gameRef.current || undefined,
       physics: GAME_CONFIG.physics,
       scale: GAME_CONFIG.scale,
+      audio: {
+        disableWebAudio: false,
+        noAudio: false
+      },
       scene: [StartMenuScene, MainScene, WaveScene, ScoreEntryScene, PauseMenuScene, CustomizationScene]
     };
 
     gameInstance.current = new Phaser.Game(config);
 
     return () => {
+      // Clean up audio context before destroying the game
+      try {
+        const game = gameInstance.current;
+        if (game && game.sound) {
+          const soundAny = game.sound as unknown as { context?: AudioContext };
+          const ctx = soundAny.context;
+          if (ctx && ctx.state !== 'closed') {
+            // Don't close the context, just ensure it's suspended
+            if (ctx.state === 'running') {
+              void ctx.suspend();
+            }
+          }
+        }
+      } catch (error) {
+        // Silently handle cleanup errors
+        console.warn('Audio context cleanup failed:', error);
+      }
+      
       gameInstance.current?.destroy(true);
       gameInstance.current = null;
     };

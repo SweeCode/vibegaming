@@ -526,11 +526,18 @@ export class StartMenuScene extends Phaser.Scene {
         // Best-effort resume for WebAudio; HTML5/NoAudio may not expose context
         const soundAny = this.sound as unknown as { context?: AudioContext };
         const ctx = soundAny.context;
-        if (ctx && ctx.state === 'suspended') void ctx.resume();
-      } catch {}
+        // Check if context exists and is not closed before attempting to resume
+        if (ctx && ctx.state === 'suspended' && ctx.state !== 'closed') {
+          void ctx.resume();
+        }
+      } catch (error) {
+        // Silently handle any audio context errors to prevent console spam
+        if (IS_DEV) console.warn('Audio context unlock failed:', error);
+      }
     };
     const soundAny = this.sound as unknown as { locked?: boolean; context?: AudioContext };
-    if (soundAny.locked || (soundAny.context && soundAny.context.state !== 'running')) {
+    // Only setup unlock if context exists and is not closed
+    if (soundAny.locked || (soundAny.context && soundAny.context.state !== 'running' && soundAny.context.state !== 'closed')) {
       this.input.once('pointerdown', tryUnlock);
       this.input.keyboard?.once('keydown', tryUnlock);
     }

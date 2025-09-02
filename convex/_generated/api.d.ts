@@ -14,6 +14,7 @@ import type {
   FunctionReference,
 } from "convex/server";
 import type * as leaderboard from "../leaderboard.js";
+import type * as skillTree from "../skillTree.js";
 import type * as upgrades from "../upgrades.js";
 
 /**
@@ -26,6 +27,7 @@ import type * as upgrades from "../upgrades.js";
  */
 declare const fullApi: ApiFromModules<{
   leaderboard: typeof leaderboard;
+  skillTree: typeof skillTree;
   upgrades: typeof upgrades;
 }>;
 export declare const api: FilterApi<

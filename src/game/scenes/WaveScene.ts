@@ -44,6 +44,7 @@ export class WaveScene extends Phaser.Scene {
   private bossIntroText?: Phaser.GameObjects.Text;
   private bossCountdownText?: Phaser.GameObjects.Text;
   private bossIntroTimers: Phaser.Time.TimerEvent[] = [];
+  private bossPreviewFlash?: Phaser.GameObjects.Graphics;
   private drone?: Drone;
 
   constructor() {
@@ -333,6 +334,12 @@ export class WaveScene extends Phaser.Scene {
     const bossName = type === 'artillery' ? 'ARTILLERY' : 'SENTINEL';
     const message = `WARNING: ${bossName} BOSS INCOMING`;
 
+    // Create initial boss preview flash
+    this.createBossPreviewFlash(type);
+    
+    // Start a subtle pulsing effect during the warning
+    this.startBossPreviewPulse();
+
     // Create intro text with typewriter effect
     this.bossIntroText = this.add.text(centerX, centerY - 40, '', {
       fontSize: '36px',
@@ -370,6 +377,9 @@ export class WaveScene extends Phaser.Scene {
       fontStyle: 'bold'
     }).setOrigin(0.5);
 
+    // Create boss spawn preview flash
+    this.createBossPreviewFlash(type);
+
     const numbers = ['3', '2', '1'];
     let i = 0;
     const showNext = () => {
@@ -384,6 +394,10 @@ export class WaveScene extends Phaser.Scene {
         ease: 'Back.Out'
       });
       this.cameras.main.shake(120, 0.008);
+      
+      // Flash the boss preview on each countdown number
+      this.flashBossPreview();
+      
       i++;
       if (i < numbers.length) {
         const t = this.time.delayedCall(420, showNext);
@@ -400,6 +414,60 @@ export class WaveScene extends Phaser.Scene {
     showNext();
   }
 
+  private createBossPreviewFlash(type: 'sentinel' | 'artillery') {
+    // Clean up any existing preview
+    if (this.bossPreviewFlash) {
+      this.bossPreviewFlash.destroy();
+    }
+
+    // Boss spawn location (same as in spawnBoss method)
+    const x = this.scale.width / 2;
+    const y = this.scale.height / 2 - 150;
+    
+    // Create preview flash graphics
+    this.bossPreviewFlash = this.add.graphics();
+    this.bossPreviewFlash.setDepth(999); // Just below the actual boss
+    
+    // Set color based on boss type
+    const color = type === 'artillery' ? 0x33FFAA : 0xFF3366;
+    
+    // Create a pulsing outline preview
+    this.bossPreviewFlash.lineStyle(4, color, 0.8);
+    this.bossPreviewFlash.strokeRoundedRect(-36, -36, 72, 72, 8);
+    this.bossPreviewFlash.setPosition(x, y);
+    this.bossPreviewFlash.setAlpha(0);
+  }
+
+  private startBossPreviewPulse() {
+    if (!this.bossPreviewFlash) return;
+    
+    // Start a subtle pulsing effect during the warning phase
+    this.bossPreviewFlash.setAlpha(0.3);
+    this.tweens.add({
+      targets: this.bossPreviewFlash,
+      alpha: { from: 0.3, to: 0.7 },
+      duration: 800,
+      ease: 'Sine.InOut',
+      yoyo: true,
+      repeat: -1
+    });
+  }
+
+  private flashBossPreview() {
+    if (!this.bossPreviewFlash) return;
+    
+    // Quick flash effect
+    this.bossPreviewFlash.setAlpha(0);
+    this.tweens.add({
+      targets: this.bossPreviewFlash,
+      alpha: { from: 0, to: 0.9 },
+      duration: 100,
+      ease: 'Power2',
+      yoyo: true,
+      repeat: 1
+    });
+  }
+
   private cleanupBossIntro() {
     for (const t of this.bossIntroTimers) {
       t.remove(false);
@@ -408,6 +476,7 @@ export class WaveScene extends Phaser.Scene {
     this.bossIntroActive = false;
     if (this.bossIntroText) { this.bossIntroText.destroy(); this.bossIntroText = undefined; }
     if (this.bossCountdownText) { this.bossCountdownText.destroy(); this.bossCountdownText = undefined; }
+    if (this.bossPreviewFlash) { this.bossPreviewFlash.destroy(); this.bossPreviewFlash = undefined; }
   }
 
   private spawnBoss(type: 'sentinel' | 'artillery') {
@@ -416,6 +485,12 @@ export class WaveScene extends Phaser.Scene {
     this.bossHitCooldownUntil = 0;
     // Ensure any existing boss is fully cleaned before spawning a new one
     this.cleanupBoss();
+    
+    // Clean up the preview flash before spawning the actual boss
+    if (this.bossPreviewFlash) {
+      this.bossPreviewFlash.destroy();
+      this.bossPreviewFlash = undefined;
+    }
     const x = this.scale.width / 2;
     const y = this.scale.height / 2 - 150;
     // Boss constructors already add themselves to the scene and physics
