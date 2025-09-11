@@ -1,4 +1,4 @@
-import { IS_DEV } from '../config/gameConfig'
+//
 
 export interface WaveSettings {
   waveNumber: number;
@@ -52,14 +52,11 @@ export class WaveManager {
     shooterPercentage /= total;
     splitterPercentage /= total;
 
-    // Boss every 5 waves (5,10,15...), and also on wave 1 during development for testing
-    const isBoss = this.currentWave % 5 === 0 || (IS_DEV && this.currentWave === 1);
+    // Boss every 5 waves (5,10,15...)
+    const isBoss = this.currentWave % 5 === 0;
     let bossType: 'sentinel' | 'artillery' | undefined = undefined;
     if (isBoss) {
-      if (IS_DEV && this.currentWave === 1) {
-        // On wave 1 during development, force the alternate boss for testing
-        bossType = 'artillery';
-      } else if (this.currentWave === 5) {
+      if (this.currentWave === 5) {
         bossType = 'sentinel';
       } else if (this.currentWave === 10) {
         bossType = 'artillery';

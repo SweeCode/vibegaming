@@ -260,6 +260,7 @@ export class CustomizationScene extends Phaser.Scene {
 
   private showNodeTooltip(node: SkillNode, x: number, y: number) {
     const rank = this.skillTree.getUnlocked(node.id);
+    const maxed = rank >= node.maxRank;
     const eff = node.effectPerRank(Math.max(1, Math.min(node.maxRank, rank + 1)));
     const parts: string[] = [];
     if (eff.stats) {
@@ -278,9 +279,36 @@ export class CustomizationScene extends Phaser.Scene {
       if (eff.modifiers.petDrone?.enabled) parts.push('Pet Drone');
       if (eff.modifiers.shieldAfterIdle?.enabled) parts.push('Reactive Shield');
     }
-    const lines = `${node.description}\nNext: ${parts.join(', ')}\nCost: ${this.skillTree.getNextCost(node.id).toLocaleString()}`;
+    const cost = this.skillTree.getNextCost(node.id);
+    const can = this.skillTree.canUnlock(node.id, this.currentScore);
+    const reasons: string[] = [];
+    if (!maxed) {
+      // Prereq reasons
+      if (node.prerequisites && node.prerequisites.length > 0) {
+        for (const p of node.prerequisites) {
+          const have = this.skillTree.getUnlocked(p.nodeId);
+          if (have < p.minRank) {
+            const prereqNode = this.skillTree.getNodes().find(n => n.id === p.nodeId);
+            const title = prereqNode ? prereqNode.title : p.nodeId;
+            reasons.push(`Requires ${title} rank ${p.minRank} (you have ${have})`);
+          }
+        }
+      }
+      // Points reason
+      if (this.currentScore < cost) {
+        reasons.push(`Need ${(cost - this.currentScore).toLocaleString()} more points`);
+      }
+    }
+
+    const header = maxed ? 'MAXED' : (can ? 'UNLOCKABLE' : 'LOCKED');
+    const baseLines = [`${node.title} — ${header}`, node.description];
+    const nextLine = maxed ? 'No further ranks.' : `Next: ${parts.join(', ') || '—'}`;
+    const costLine = maxed ? '' : `Cost: ${cost.toLocaleString()} (You have: ${this.currentScore.toLocaleString()})`;
+    const reasonLines = reasons.length ? ['Why locked:', ...reasons] : [];
+    const all = [...baseLines, nextLine, costLine, ...reasonLines].filter(Boolean).join('\n');
+
     this.tooltip?.destroy();
-    this.tooltip = this.add.text(x, y, lines, {
+    this.tooltip = this.add.text(x, y, all, {
       fontSize: '12px', color: '#ffffee', backgroundColor: '#000000', padding: { x: 8, y: 6 }
     }).setOrigin(0, 0.5);
   }

@@ -48,6 +48,9 @@ export type ActiveModifiers = {
   pierceCount: number
   petDrone: { enabled: boolean; dps: number }
   shieldAfterIdle: { enabled: boolean; idleSeconds: number; shieldHp: number }
+  // Minimum fire rate allowed (ms). Player can choose equal or slower.
+  // If 0/undefined, default UI minimum will be used.
+  petFireRateMs?: number
 }
 
 const TREE_VERSION = 1
@@ -215,6 +218,11 @@ export class SkillTreeManager {
       mods.pierceCount += eff.pierceCount ?? 0
       if (eff.petDrone?.enabled) mods.petDrone = eff.petDrone
       if (eff.shieldAfterIdle?.enabled) mods.shieldAfterIdle = eff.shieldAfterIdle
+      // Optional: some nodes may set petFireRateMs via 'as any'
+      const anyEff = eff as unknown as { petFireRateMs?: number }
+      if (typeof anyEff.petFireRateMs === 'number') {
+        (mods as unknown as { petFireRateMs?: number }).petFireRateMs = anyEff.petFireRateMs
+      }
     }
     // clamp
     mods.damageReductionPct = Math.min(0.8, Math.max(0, mods.damageReductionPct))

@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Pet System**: Comprehensive pet management and customization system
+  - PetScene for managing pet settings and configurations
+  - Pet unlock system requiring level 10 achievement
+  - Configurable pet fire rate and damage settings
+  - Pet settings menu integrated into start screen
+  - Pet drone with customizable fire rate (minimum 200ms)
+  - Pet damage caps based on skill tree upgrades
+- **Enhanced Skill Tree System**: Improved skill tree interface and functionality
+  - Better tooltip system showing unlock requirements and prerequisites
+  - Detailed unlock status display (LOCKED/UNLOCKABLE/MAXED)
+  - Prerequisite checking with specific rank requirements
+  - Pet fire rate modifiers in skill tree
+  - Enhanced skill tree backend with Convex integration
 - **Persistent Wave Progress System**: Complete wave-based scoring system with Convex backend storage
   - Individual wave completion tracking with timestamps
   - Score persistence across game sessions
@@ -33,10 +46,20 @@ All notable changes to this project will be documented in this file.
 - Leaderboard positioning: moved below mode switching buttons for full visibility
 
 ### Changed
+- **Pet System Integration**: Enhanced pet functionality throughout the game
+  - Pet drone now supports configurable fire rate in constructor
+  - Player shield detection method added for pet system integration
+  - Pet button in start menu with unlock requirements and tooltips
 - **Wave Completion Logic**: Improved wave completion handling with proper score validation
   - Wave completion now checks against persistent storage before awarding score
   - Boss and regular wave completion properly integrated with score system
   - Wave notifications show completion status with appropriate styling
+- **Game Scene Management**: Updated scene registration and management
+  - PetScene added to main game scene list
+  - Audio configuration preserved during scene updates
+- **Development Improvements**: Cleaned up development-specific features
+  - Removed dev-only boss spawning on wave 1
+  - Improved skill tree tooltip system with better error handling
 - Boss waves now have a cinematic intro on all boss waves (warning typewriter + 3-2-1 countdown with camera shakes) replacing the normal wave banner on boss waves
 - Shooter boss volley increased from 5 to 7 shots; bullets flagged as boss-origin for damage scaling
 - Artillery boss overhauled: slow homing movement, doubled salvos (36 shots), fires immediately on spawn, max health set to 50

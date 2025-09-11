@@ -142,4 +142,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       }
     }
   }
+
+  hasShield(): boolean {
+    return this.shieldHp > 0;
+  }
 }

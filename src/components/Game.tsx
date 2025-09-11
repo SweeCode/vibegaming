@@ -5,11 +5,11 @@ import { useEffect, useRef } from 'react';
 import { GAME_CONFIG } from '@/game/config/gameConfig';
 import { MainScene } from '@/game/scenes/MainScene';
 import { StartMenuScene } from '@/game/scenes/StartMenuScene';
+import { PetScene } from '@/game/scenes/PetScene';
 import { ScoreEntryScene } from '@/game/scenes/ScoreEntryScene';
 import { PauseMenuScene } from '@/game/scenes/PauseMenuScene';
 import { WaveScene } from '@/game/scenes/WaveScene';
 import { CustomizationScene } from '@/game/scenes/CustomizationScene';
-import { PetScene } from '@/game/scenes/PetScene';
 
 const Game = () => {
   const gameRef = useRef<HTMLDivElement>(null);
@@ -31,7 +31,7 @@ const Game = () => {
         disableWebAudio: false,
         noAudio: false
       },
-      scene: [StartMenuScene, MainScene, WaveScene, ScoreEntryScene, PauseMenuScene, CustomizationScene, PetScene]
+      scene: [StartMenuScene, PetScene, MainScene, WaveScene, ScoreEntryScene, PauseMenuScene, CustomizationScene]
     };
 
     gameInstance.current = new Phaser.Game(config);

@@ -6,12 +6,14 @@ export class Drone extends Phaser.GameObjects.Container {
   private player: Player
   private fireTimer?: Phaser.Time.TimerEvent
   private onFire: (x: number, y: number) => void
+  private fireRateMs: number
 
-  constructor(scene: Phaser.Scene, player: Player, onFire: (x: number, y: number) => void) {
+  constructor(scene: Phaser.Scene, player: Player, onFire: (x: number, y: number) => void, fireRateMs = 600) {
     super(scene, player.x, player.y)
     this.sceneRef = scene
     this.player = player
     this.onFire = onFire
+    this.fireRateMs = fireRateMs
 
     const g = scene.add.graphics()
     g.fillStyle(0x66ccff, 1)
@@ -31,7 +33,7 @@ export class Drone extends Phaser.GameObjects.Container {
   startFiring() {
     this.fireTimer?.remove()
     this.fireTimer = this.sceneRef.time.addEvent({
-      delay: 600,
+      delay: this.fireRateMs,
       loop: true,
       callback: () => this.fire()
     })

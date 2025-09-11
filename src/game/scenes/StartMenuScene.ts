@@ -6,8 +6,8 @@ import { ScoreManager } from '../systems/ScoreManager';
 export class StartMenuScene extends Phaser.Scene {
   private startButton!: Phaser.GameObjects.Text;
   private optionsButton!: Phaser.GameObjects.Text;
+  private petButton?: Phaser.GameObjects.Text;
   private leaderboardButton!: Phaser.GameObjects.Text;
-  private petButton!: Phaser.GameObjects.Text;
   private gameModesButton?: Phaser.GameObjects.Text;
   private titleText!: Phaser.GameObjects.Text;
   private leaderboardTitle?: Phaser.GameObjects.Text;
@@ -28,6 +28,7 @@ export class StartMenuScene extends Phaser.Scene {
   private showingWaveProgress = false;
   private currentLeaderboardMode: 'endless' | 'wave' = 'endless';
   private scoreManager?: ScoreManager;
+  private petOverlay?: Phaser.GameObjects.Container;
   // Background FX
   private bgStarsFar?: Phaser.GameObjects.Group;
   private bgStarsNear?: Phaser.GameObjects.Group;
@@ -104,18 +105,23 @@ export class StartMenuScene extends Phaser.Scene {
       .on('pointerover', () => this.leaderboardButton.setStyle({ backgroundColor: '#006666' }))
       .on('pointerout', () => this.leaderboardButton.setStyle({ backgroundColor: '#004444' }));
 
-    // Pet Button
-    this.petButton = this.add.text(centerX, centerY + 95, 'PET', {
+    // Pet Button (locked until level 10, unlocked in dev)
+    const unlocked = IS_DEV || this.isPetUnlocked();
+    this.petButton = this.add.text(centerX, centerY + 100, unlocked ? 'PET' : 'PET (LOCKED)', {
       fontSize: '28px',
-      color: '#ff6600',
-      backgroundColor: '#442200',
+      color: unlocked ? '#00ffff' : '#888888',
+      backgroundColor: unlocked ? '#004466' : '#333333',
       padding: { x: 20, y: 10 }
     }).setOrigin(0.5)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', this.showPetMenu, this)
-      .on('pointerover', () => this.petButton.setStyle({ backgroundColor: '#663300' }))
-      .on('pointerout', () => this.petButton.setStyle({ backgroundColor: '#442200' }));
-
+      .setInteractive({ useHandCursor: unlocked })
+      .on('pointerdown', () => { if (unlocked) this.scene.start('PetScene'); })
+      .on('pointerover', () => { if (unlocked) this.petButton?.setStyle({ backgroundColor: '#006699' }) })
+      .on('pointerout', () => { if (unlocked) this.petButton?.setStyle({ backgroundColor: '#004466' }) });
+    if (!unlocked) {
+      // Tooltip explaining requirement
+      const tip = this.add.text(centerX, centerY + 140, 'Reach level 10 to unlock', { fontSize: '16px', color: '#cccccc' }).setOrigin(0.5).setAlpha(0.85)
+      this.time.delayedCall(3500, () => tip.destroy())
+    }
     // Instructions
     this.add.text(this.scale.width / 2, this.scale.height - 60, 'Ctrl+Shift+R to reset leaderboard', {
       fontSize: '16px',
@@ -238,10 +244,23 @@ export class StartMenuScene extends Phaser.Scene {
     this.scene.start('CustomizationScene');
   }
 
-  private showPetMenu() {
-    // Go to pet scene
-    this.scene.start('PetScene');
-  }
+    // Pet Button (locked until level 10, unlocked in dev)
+    const unlocked = IS_DEV || this.isPetUnlocked();
+    this.petButton = this.add.text(centerX, centerY + 100, unlocked ? 'PET' : 'PET (LOCKED)', {
+      fontSize: '28px',
+      color: unlocked ? '#00ffff' : '#888888',
+      backgroundColor: unlocked ? '#004466' : '#333333',
+      padding: { x: 20, y: 10 }
+    }).setOrigin(0.5)
+      .setInteractive({ useHandCursor: unlocked })
+      .on('pointerdown', () => { if (unlocked) this.scene.start('PetScene'); })
+      .on('pointerover', () => { if (unlocked) this.petButton?.setStyle({ backgroundColor: '#006699' }) })
+      .on('pointerout', () => { if (unlocked) this.petButton?.setStyle({ backgroundColor: '#004466' }) });
+    if (!unlocked) {
+      // Tooltip explaining requirement
+      const tip = this.add.text(centerX, centerY + 140, 'Reach level 10 to unlock', { fontSize: '16px', color: '#cccccc' }).setOrigin(0.5).setAlpha(0.85)
+      this.time.delayedCall(3500, () => tip.destroy())
+    }  }
 
   private showLeaderboard() {
     if (this.showingLeaderboard) return;
@@ -254,6 +273,7 @@ export class StartMenuScene extends Phaser.Scene {
     this.petButton.setVisible(false);
     this.leaderboardButton.setVisible(false);
     this.gameModesButton?.setVisible(false);
+    this.petButton?.setVisible(false);
     this.titleText.setVisible(false);
 
     // Show leaderboard mode selection
@@ -500,6 +520,7 @@ export class StartMenuScene extends Phaser.Scene {
     this.petButton.setVisible(true);
     this.leaderboardButton.setVisible(true);
     this.gameModesButton?.setVisible(true);
+    this.petButton?.setVisible(true);
 
     if (this.leaderboardDisplay) { this.leaderboardDisplay.destroy(); this.leaderboardDisplay = undefined; }
     if (this.leaderboardContainer) { this.leaderboardContainer.destroy(true); this.leaderboardContainer = undefined; }
@@ -579,6 +600,7 @@ export class StartMenuScene extends Phaser.Scene {
     this.petButton.setVisible(false);
     this.leaderboardButton.setVisible(false);
     this.gameModesButton?.setVisible(false);
+    this.petButton?.setVisible(false);
 
     const centerX = this.scale.width / 2;
     const centerY = this.scale.height / 2;
@@ -640,6 +662,7 @@ export class StartMenuScene extends Phaser.Scene {
     this.petButton.setVisible(true);
     this.leaderboardButton.setVisible(true);
     this.gameModesButton?.setVisible(true);
+    this.petButton?.setVisible(true);
 
     if (this.classicButton) { this.classicButton.destroy(); this.classicButton = undefined; }
     if (this.waveButton) { this.waveButton.destroy(); this.waveButton = undefined; }
