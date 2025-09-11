@@ -5,16 +5,38 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Persistent Wave Progress System**: Complete wave-based scoring system with Convex backend storage
+  - Individual wave completion tracking with timestamps
+  - Score persistence across game sessions
+  - Wave completion status display ("ALREADY COMPLETED" notifications)
+  - Wave progress indicator in UI showing highest completed wave
+- **Score Management System**: Comprehensive score tracking and validation
+  - ScoreManager class for handling wave completion and score calculation
+  - Base score calculation for regular and boss waves
+  - Efficiency bonus system based on kill ratio and completion speed
+  - Duplicate score prevention for already completed waves
+- **Enhanced Wave Mode Features**:
+  - Wave progress display in start menu
+  - Visual indicators for completed vs uncompleted waves
+  - Boss wave completion status in intro sequences
 - Snacks counter in the in-game HUD (both Classic and Wave modes) so pet currency is visible during play
 - Boss spawn preview with flash effects during countdown - shows exact spawn location with boss-specific colors
 
 ### Fixed
+- **Score System Bug**: Fixed issue where replaying completed waves would appear to award additional score
+  - Score accumulation now properly prevented for already completed waves
+  - UI display correctly shows only total score for completed waves
+  - Current wave score resets appropriately when waves are already completed
 - Pet upgrades screen now shows upgrade rows with level, cost, and BUY buttons and updates Snacks balance on purchase
 - Snacks HUD refreshes after boss defeats that award snacks
 - Leaderboard UI issues: buttons now appear above background, removed duplicate header text
 - Leaderboard positioning: moved below mode switching buttons for full visibility
 
 ### Changed
+- **Wave Completion Logic**: Improved wave completion handling with proper score validation
+  - Wave completion now checks against persistent storage before awarding score
+  - Boss and regular wave completion properly integrated with score system
+  - Wave notifications show completion status with appropriate styling
 - Boss waves now have a cinematic intro on all boss waves (warning typewriter + 3-2-1 countdown with camera shakes) replacing the normal wave banner on boss waves
 - Shooter boss volley increased from 5 to 7 shots; bullets flagged as boss-origin for damage scaling
 - Artillery boss overhauled: slow homing movement, doubled salvos (36 shots), fires immediately on spawn, max health set to 50

@@ -38,5 +38,14 @@ export default defineSchema({
       updatedAt: v.number()
     }),
     updatedAt: v.number()
-  }).index('by_user', ['userKey'])
+  }).index('by_user', ['userKey']),
+  waveProgress: defineTable({
+    deviceId: v.string(),
+    waveNumber: v.number(),
+    score: v.number(),
+    completedAt: v.number(),
+    isBoss: v.boolean(),
+    bossType: v.optional(v.union(v.literal('sentinel'), v.literal('artillery'))),
+    updatedAt: v.number()
+  }).index('by_device_wave', ['deviceId', 'waveNumber'])
 })

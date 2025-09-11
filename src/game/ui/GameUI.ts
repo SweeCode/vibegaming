@@ -18,6 +18,7 @@ export class GameUI {
   private saveScoreButton?: Phaser.GameObjects.Text;
   private droneIndicator?: Phaser.GameObjects.Text;
   private shieldIndicator?: Phaser.GameObjects.Text;
+  private waveProgressText?: Phaser.GameObjects.Text;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -51,6 +52,13 @@ export class GameUI {
       fontSize: '24px',
       color: '#ffff66'
     });
+
+    // Wave progress indicator (for wave mode) - discreet display
+    this.waveProgressText = this.scene.add.text(16, 186, '', {
+      fontSize: '16px',
+      color: '#888888'
+    });
+    this.waveProgressText.setAlpha(0.7);
     
     // ESC instruction
     this.scene.add.text(16, this.scene.scale.height - 40, 'Press ESC to return to menu', {
@@ -147,6 +155,34 @@ export class GameUI {
 
   updateSnacks(count: number) {
     this.snacksText.setText(`Snacks: ${count}`);
+  }
+
+  updateWaveProgress(completedWaves: number, highestWave: number, currentWave?: number) {
+    if (this.waveProgressText) {
+      if (currentWave !== undefined) {
+        // Wave mode - show only highest completed wave discreetly
+        if (highestWave > 0) {
+          this.waveProgressText.setText(`Best: Wave ${highestWave}`);
+        } else {
+          this.waveProgressText.setText('');
+        }
+      } else {
+        // Show overall progress
+        this.waveProgressText.setText(`Completed Waves: ${completedWaves}/${highestWave}`);
+      }
+    }
+  }
+
+  hideWaveProgress() {
+    if (this.waveProgressText) {
+      this.waveProgressText.setVisible(false);
+    }
+  }
+
+  showWaveProgress() {
+    if (this.waveProgressText) {
+      this.waveProgressText.setVisible(true);
+    }
   }
 
   showGameOver(onRetry?: () => void, onMenu?: () => void, onSave?: () => void) {
@@ -283,6 +319,17 @@ export class GameUI {
       this.shieldIndicator.setText('SHIELD').setAlpha(1);
     } else {
       this.shieldIndicator.setAlpha(0).setText('');
+    }
+  }
+
+  updateProgress(completedWaves: number, highestWave: number, totalScore: number) {
+    // Update score text to show total score
+    this.scoreText.setText(`Score: ${totalScore}`);
+    
+    // Add progress info to difficulty text if in wave mode
+    const currentText = this.difficultyText.text;
+    if (currentText.includes('Wave')) {
+      this.difficultyText.setText(`${currentText} | Completed: ${completedWaves}/${highestWave}`);
     }
   }
 }

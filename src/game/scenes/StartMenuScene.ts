@@ -1,11 +1,13 @@
 import * as Phaser from 'phaser';
 import { IS_DEV } from '../config/gameConfig';
 import { fetchTopScoresConvex } from '@/lib/convexClient';
+import { ScoreManager } from '../systems/ScoreManager';
 
 export class StartMenuScene extends Phaser.Scene {
   private startButton!: Phaser.GameObjects.Text;
   private optionsButton!: Phaser.GameObjects.Text;
   private leaderboardButton!: Phaser.GameObjects.Text;
+  private petButton!: Phaser.GameObjects.Text;
   private gameModesButton?: Phaser.GameObjects.Text;
   private titleText!: Phaser.GameObjects.Text;
   private leaderboardTitle?: Phaser.GameObjects.Text;
@@ -19,9 +21,13 @@ export class StartMenuScene extends Phaser.Scene {
   private classicButton?: Phaser.GameObjects.Text;
   private waveButton?: Phaser.GameObjects.Text;
   private modesBackButton?: Phaser.GameObjects.Text;
+  private waveProgressButton?: Phaser.GameObjects.Text;
+  private waveProgressDisplay?: Phaser.GameObjects.Text;
   private showingLeaderboard = false;
   private showingModes = false;
+  private showingWaveProgress = false;
   private currentLeaderboardMode: 'endless' | 'wave' = 'endless';
+  private scoreManager?: ScoreManager;
   // Background FX
   private bgStarsFar?: Phaser.GameObjects.Group;
   private bgStarsNear?: Phaser.GameObjects.Group;
@@ -37,7 +43,9 @@ export class StartMenuScene extends Phaser.Scene {
     // Reset any state when the scene starts
     this.showingLeaderboard = false;
     this.showingModes = false;
+    this.showingWaveProgress = false;
     this.currentLeaderboardMode = 'endless';
+    this.scoreManager = new ScoreManager();
   }
 
   create() {
@@ -96,7 +104,17 @@ export class StartMenuScene extends Phaser.Scene {
       .on('pointerover', () => this.leaderboardButton.setStyle({ backgroundColor: '#006666' }))
       .on('pointerout', () => this.leaderboardButton.setStyle({ backgroundColor: '#004444' }));
 
-
+    // Pet Button
+    this.petButton = this.add.text(centerX, centerY + 95, 'PET', {
+      fontSize: '28px',
+      color: '#ff6600',
+      backgroundColor: '#442200',
+      padding: { x: 20, y: 10 }
+    }).setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', this.showPetMenu, this)
+      .on('pointerover', () => this.petButton.setStyle({ backgroundColor: '#663300' }))
+      .on('pointerout', () => this.petButton.setStyle({ backgroundColor: '#442200' }));
 
     // Instructions
     this.add.text(this.scale.width / 2, this.scale.height - 60, 'Ctrl+Shift+R to reset leaderboard', {
@@ -220,6 +238,11 @@ export class StartMenuScene extends Phaser.Scene {
     this.scene.start('CustomizationScene');
   }
 
+  private showPetMenu() {
+    // Go to pet scene
+    this.scene.start('PetScene');
+  }
+
   private showLeaderboard() {
     if (this.showingLeaderboard) return;
 
@@ -228,6 +251,7 @@ export class StartMenuScene extends Phaser.Scene {
     // Hide main menu buttons
     this.startButton.setVisible(false);
     this.optionsButton.setVisible(false);
+    this.petButton.setVisible(false);
     this.leaderboardButton.setVisible(false);
     this.gameModesButton?.setVisible(false);
     this.titleText.setVisible(false);
@@ -355,8 +379,8 @@ export class StartMenuScene extends Phaser.Scene {
     // Column headers
     const colRankX = -panelWidth / 2 + 40;
     const colNameX = -panelWidth / 2 + 100;
-    const colScoreX = panelWidth / 2 - 220;
-    const colTimeX = panelWidth / 2 - 120;
+    const colScoreX = panelWidth / 2 - 280;
+    const colTimeX = panelWidth / 2 - 160;
     const colDateX = panelWidth / 2 - 20;
 
     const headerY = listY - (maxVisible * rowHeight) / 2 - 10;
@@ -415,8 +439,12 @@ export class StartMenuScene extends Phaser.Scene {
         const timeText = this.add.text(colTimeX, y + rowHeight / 2, formatTime(entry.time || 0), rowStyle).setOrigin(0, 0.5);
         this.leaderboardContainer?.add(timeText);
 
-        // Date
-        const dateStr = entry.createdAt ? new Date(entry.createdAt).toLocaleDateString() : '';
+        // Date (compact format: MM/DD/YY)
+        const dateStr = entry.createdAt ? new Date(entry.createdAt).toLocaleDateString('en-US', { 
+          month: '2-digit', 
+          day: '2-digit', 
+          year: '2-digit' 
+        }) : '';
         const dateText = this.add.text(colDateX, y + rowHeight / 2, dateStr, rowStyle).setOrigin(1, 0.5);
         this.leaderboardContainer?.add(dateText);
       });
@@ -469,6 +497,7 @@ export class StartMenuScene extends Phaser.Scene {
 
     this.startButton.setVisible(true);
     this.optionsButton.setVisible(true);
+    this.petButton.setVisible(true);
     this.leaderboardButton.setVisible(true);
     this.gameModesButton?.setVisible(true);
 
@@ -525,7 +554,7 @@ export class StartMenuScene extends Phaser.Scene {
         const soundAny = this.sound as unknown as { context?: AudioContext };
         const ctx = soundAny.context;
         // Check if context exists and is not closed before attempting to resume
-        if (ctx && ctx.state === 'suspended' && ctx.state !== 'closed') {
+        if (ctx && ctx.state === 'suspended') {
           void ctx.resume();
         }
       } catch (error) {
@@ -547,6 +576,7 @@ export class StartMenuScene extends Phaser.Scene {
 
     this.startButton.setVisible(false);
     this.optionsButton.setVisible(false);
+    this.petButton.setVisible(false);
     this.leaderboardButton.setVisible(false);
     this.gameModesButton?.setVisible(false);
 
@@ -577,6 +607,18 @@ export class StartMenuScene extends Phaser.Scene {
       .on('pointerover', () => this.waveButton?.setStyle({ backgroundColor: '#660066' }))
       .on('pointerout', () => this.waveButton?.setStyle({ backgroundColor: '#440044' }));
 
+    // Add wave progress button
+    this.waveProgressButton = this.add.text(centerX + 100, centerY + 20, 'PROGRESS', {
+      fontSize: '16px',
+      color: '#888888',
+      backgroundColor: '#222222',
+      padding: { x: 10, y: 5 }
+    }).setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', this.showWaveProgress, this)
+      .on('pointerover', () => this.waveProgressButton?.setStyle({ backgroundColor: '#333333' }))
+      .on('pointerout', () => this.waveProgressButton?.setStyle({ backgroundColor: '#222222' }));
+
     this.modesBackButton = this.add.text(centerX, centerY + 120, 'BACK', {
       fontSize: '24px',
       color: '#ffffff',
@@ -595,12 +637,80 @@ export class StartMenuScene extends Phaser.Scene {
 
     this.startButton.setVisible(true);
     this.optionsButton.setVisible(true);
+    this.petButton.setVisible(true);
     this.leaderboardButton.setVisible(true);
     this.gameModesButton?.setVisible(true);
 
     if (this.classicButton) { this.classicButton.destroy(); this.classicButton = undefined; }
     if (this.waveButton) { this.waveButton.destroy(); this.waveButton = undefined; }
     if (this.modesBackButton) { this.modesBackButton.destroy(); this.modesBackButton = undefined; }
+    if (this.waveProgressButton) { this.waveProgressButton.destroy(); this.waveProgressButton = undefined; }
+    if (this.waveProgressDisplay) { this.waveProgressDisplay.destroy(); this.waveProgressDisplay = undefined; }
+  }
+
+  private showWaveProgress() {
+    if (this.showingWaveProgress) return;
+    this.showingWaveProgress = true;
+
+    const centerX = this.scale.width / 2;
+    const centerY = this.scale.height / 2;
+
+    // Hide game mode buttons
+    this.classicButton?.setVisible(false);
+    this.waveButton?.setVisible(false);
+    this.modesBackButton?.setVisible(false);
+    this.waveProgressButton?.setVisible(false);
+
+    // Create wave progress display
+    const progress = this.scoreManager?.getProgress();
+    const highestWave = progress?.highestWave || 0;
+    const totalScore = progress?.totalScore || 0;
+
+    this.waveProgressDisplay = this.add.text(centerX, centerY, 
+      `WAVE PROGRESS\n\nHighest Wave: ${highestWave}\nTotal Score: ${totalScore}\n\nClick anywhere to return`, {
+      fontSize: '24px',
+      color: '#ffffff',
+      backgroundColor: '#000000',
+      padding: { x: 30, y: 20 },
+      align: 'center'
+    }).setOrigin(0.5);
+
+    // Add reset button if there's progress
+    if (highestWave > 0) {
+      const resetButton = this.add.text(centerX, centerY + 120, 'RESET PROGRESS', {
+        fontSize: '18px',
+        color: '#ff6666',
+        backgroundColor: '#440000',
+        padding: { x: 15, y: 8 }
+      }).setOrigin(0.5)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', async () => {
+          const success = await this.scoreManager?.resetProgress();
+          if (success) {
+            this.hideWaveProgress();
+            this.showGameModes(); // Refresh the game modes to show updated progress
+          }
+        }, this)
+        .on('pointerover', () => resetButton.setStyle({ backgroundColor: '#660000' }))
+        .on('pointerout', () => resetButton.setStyle({ backgroundColor: '#440000' }));
+    }
+
+    // Make clickable to return
+    this.waveProgressDisplay.setInteractive({ useHandCursor: true })
+      .on('pointerdown', this.hideWaveProgress, this);
+  }
+
+  private hideWaveProgress() {
+    if (!this.showingWaveProgress) return;
+    this.showingWaveProgress = false;
+
+    this.waveProgressDisplay?.destroy();
+
+    // Show game mode buttons again
+    this.classicButton?.setVisible(true);
+    this.waveButton?.setVisible(true);
+    this.modesBackButton?.setVisible(true);
+    this.waveProgressButton?.setVisible(true);
   }
 
   update(_time: number, delta: number) {

@@ -65,7 +65,7 @@ export class MainScene extends Phaser.Scene {
     if (mods.petDrone?.enabled) {
       const settings = loadPetSettings(mods);
       this.drone?.destroy();
-      this.drone = new Drone(this, this.player, (x: number, y: number) => this.fireDroneBullet(x, y, settings.damage), settings.fireRateMs);
+      this.drone = new Drone(this, this.player, (x: number, y: number) => this.fireDroneBullet(x, y, settings.damage));
     }
   }
 
@@ -85,7 +85,7 @@ export class MainScene extends Phaser.Scene {
     if (this.reloadingBar) this.reloadingBar.update();
     // UI indicators
     this.gameUI.setDroneActive(!!this.drone);
-    this.gameUI.setShieldActive(this.player?.hasShield?.() === true);
+    this.gameUI.setShieldActive(false); // MainScene doesn't have shield functionality
     this.updateTimer(); // Update timer display
   }
 
@@ -167,6 +167,8 @@ export class MainScene extends Phaser.Scene {
     this.gameUI = new GameUI(this);
     this.gameUI.updateAmmo(this.ammo);
     this.gameUI.updateSnacks(getSnacks());
+    this.gameUI.updateScore(this.score);
+    this.gameUI.hideWaveProgress(); // Hide wave progress in endless mode
   }
 
   private createReloadingBar() {
@@ -562,7 +564,7 @@ export class MainScene extends Phaser.Scene {
 
   private resetGame() {
     this.gameOver = false;
-    this.score = 0;
+    this.score = 0; // Reset session score, keep total score from ScoreManager
     
     // Refresh player stats in case upgrades were purchased
     this.initializePlayerStats();

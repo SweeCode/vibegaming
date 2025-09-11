@@ -20,6 +20,7 @@ A modern web-based space shooter game built with Next.js, TypeScript, and Phaser
 - **Pause System**: ESC to pause, resume or quit
 - **Health System**: Take damage and heal between rounds
 - **Ammo Management**: Limited ammo with reload mechanics
+- **Persistent Score System**: Wave completion tracking with Convex backend storage
 
 ### Visual Features
 - **Swedish Theme**: Nordic-inspired main menu design
@@ -78,6 +79,9 @@ npm start
 - 3-second breaks between waves
 - Increasing enemy counts and variety
 - Clear objectives per wave
+- **Persistent Progress**: Wave completion tracked across sessions
+- **Score Validation**: Prevents duplicate scoring on replay
+- **Progress Indicators**: Visual feedback for completed vs uncompleted waves
 - **Boss Battles**: Epic boss encounters every 5 waves with cinematic intros and spawn previews
 
 ### Boss Battles
@@ -126,7 +130,8 @@ src/
     ├── systems/           # Game systems
     │   ├── DifficultyManager.ts   # Classic mode difficulty
     │   ├── WaveManager.ts         # Wave mode progression
-    │   └── UpgradeManager.ts      # Character upgrades
+    │   ├── UpgradeManager.ts      # Character upgrades
+    │   └── ScoreManager.ts        # Persistent score tracking
     └── ui/                # UI components
         ├── GameUI.ts      # In-game interface
         └── ReloadingBar.ts # Reload progress indicator
@@ -138,7 +143,8 @@ src/
 - **Next.js 15.4.3**: React framework
 - **TypeScript**: Type-safe JavaScript
 - **Phaser.js 3.90.0**: Game engine
-- **LocalStorage**: Data persistence
+- **Convex**: Backend database for persistent score storage
+- **LocalStorage**: Data persistence for upgrades and settings
 
 ### Key Systems
 
@@ -163,7 +169,8 @@ interface PlayerStats {
 #### Data Persistence
 - Upgrade levels stored in localStorage
 - Separate leaderboards for each game mode
-- Score accumulation across sessions
+- Wave completion tracking in Convex database
+- Score accumulation across sessions with duplicate prevention
 
 ## 🎨 Customization
 

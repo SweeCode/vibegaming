@@ -16,6 +16,7 @@ import type {
 import type * as leaderboard from "../leaderboard.js";
 import type * as skillTree from "../skillTree.js";
 import type * as upgrades from "../upgrades.js";
+import type * as waveProgress from "../waveProgress.js";
 
 /**
  * A utility for referencing Convex functions in your app's API.
@@ -29,6 +30,7 @@ declare const fullApi: ApiFromModules<{
   leaderboard: typeof leaderboard;
   skillTree: typeof skillTree;
   upgrades: typeof upgrades;
+  waveProgress: typeof waveProgress;
 }>;
 export declare const api: FilterApi<
   typeof fullApi,

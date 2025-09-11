@@ -8,6 +8,7 @@ import { GameUI } from '../ui/GameUI';
 import { ReloadingBar } from '../ui/ReloadingBar';
 import { WaveManager } from '../systems/WaveManager';
 import { UpgradeManager } from '../systems/UpgradeManager';
+import { ScoreManager } from '../systems/ScoreManager';
 import { Drone } from '../objects/Drone';
 import { loadPetSettings } from '../systems/petSettings';
 
@@ -21,6 +22,7 @@ export class WaveScene extends Phaser.Scene {
   private reloadingBar!: ReloadingBar;
   private waveManager!: WaveManager;
   private upgradeManager!: UpgradeManager;
+  private scoreManager!: ScoreManager;
   private boss?: Boss;
   private bossHealthBar?: Phaser.GameObjects.Graphics;
   private bossHealthText?: Phaser.GameObjects.Text;
@@ -30,6 +32,8 @@ export class WaveScene extends Phaser.Scene {
   // Prevent multiple damage applications from a single collision/frame
   private bossHitCooldownUntil: number = 0;
   private score = 0;
+  private currentWaveScore = 0; // Score earned in current wave
+  private waveStartTime: number = 0; // When current wave started
   private ammo = GAME_SETTINGS.weapons.bullet.maxAmmo;
   private maxAmmo = GAME_SETTINGS.weapons.bullet.maxAmmo;
   private isReloading = false;
@@ -73,6 +77,7 @@ export class WaveScene extends Phaser.Scene {
   create() {
     this.gameStartTime = Date.now();
     this.upgradeManager = new UpgradeManager();
+    this.scoreManager = new ScoreManager();
     this.initializePlayerStats();
     this.createPlayer();
     this.createBullets();
@@ -107,7 +112,7 @@ export class WaveScene extends Phaser.Scene {
     if (this.reloadingBar) this.reloadingBar.update();
     // UI indicators
     this.gameUI.setDroneActive(!!this.drone);
-    this.gameUI.setShieldActive(this.player?.hasShield?.() === true);
+    this.gameUI.setShieldActive(false); // Shield functionality not implemented yet
     this.updateTimer();
     this.updateWaveSystem();
   }
@@ -197,6 +202,7 @@ export class WaveScene extends Phaser.Scene {
     this.gameUI = new GameUI(this);
     this.gameUI.updateAmmo(this.ammo);
     this.gameUI.updateSnacks(getSnacks());
+    this.gameUI.updateScore(this.scoreManager.getTotalScore());
   }
 
   private createReloadingBar() {
@@ -205,6 +211,8 @@ export class WaveScene extends Phaser.Scene {
 
   private createWaveManager() {
     this.waveManager = new WaveManager();
+    // Update progress display now that wave manager is initialized
+    this.updateProgressDisplay();
   }
 
   private setupCollisions() {
@@ -232,6 +240,8 @@ export class WaveScene extends Phaser.Scene {
 
   private startFirstWave() {
     this.waveManager.startWave();
+    this.currentWaveScore = 0; // Reset current wave score
+    this.waveStartTime = Date.now();
     const settings = this.waveManager.getCurrentWaveSettings();
     if (settings.isBoss) {
       // On all boss waves, show the boss intro instead of the normal wave notification
@@ -245,7 +255,7 @@ export class WaveScene extends Phaser.Scene {
     if (mods.petDrone?.enabled) {
       const settings = loadPetSettings(mods);
       this.drone?.destroy();
-      this.drone = new Drone(this, this.player, (x: number, y: number) => this.fireDroneBullet(x, y, settings.damage), settings.fireRateMs);
+      this.drone = new Drone(this, this.player, (x: number, y: number) => this.fireDroneBullet(x, y, settings.damage));
     }
   }
 
@@ -293,6 +303,8 @@ export class WaveScene extends Phaser.Scene {
     const bossActive = !!this.boss && this.boss.active;
     if (!bossActive && this.waveManager.isWaveComplete() && activeEnemies === 0) {
       if (IS_DEV) console.log('Wave completed! Starting break...');
+      // Complete the wave and calculate final score
+      this.completeCurrentWave();
       // Wave completed, start break
       this.waveManager.startBreak();
       this.showBreakNotification();
@@ -308,6 +320,8 @@ export class WaveScene extends Phaser.Scene {
     if (IS_DEV) console.log('Starting next wave...');
     this.waveManager.endBreak();
     this.waveManager.startWave();
+    this.currentWaveScore = 0; // Reset current wave score
+    this.waveStartTime = Date.now();
     if (IS_DEV) console.log(`Now on wave ${this.waveManager.getCurrentWave()}`);
     const settings = this.waveManager.getCurrentWaveSettings();
     if (settings.isBoss) {
@@ -326,12 +340,11 @@ export class WaveScene extends Phaser.Scene {
     this.cleanupBossIntro();
 
     // Compose message
-    // Current wave (reserved for future dynamic messaging)
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _waveNum = this.waveManager.getCurrentWave();
+    const waveNum = this.waveManager.getCurrentWave();
     const centerX = this.scale.width / 2;
     const centerY = this.scale.height / 2;
     const bossName = type === 'artillery' ? 'ARTILLERY' : 'SENTINEL';
+    const isCompleted = this.scoreManager.isWaveCompleted(waveNum);
     const message = `WARNING: ${bossName} BOSS INCOMING`;
 
     // Create initial boss preview flash
@@ -359,6 +372,15 @@ export class WaveScene extends Phaser.Scene {
         if (Math.random() < 0.12) this.cameras.main.shake(80, 0.003);
         if (idx >= message.length) {
           typeTimer.remove(false);
+          // Add completion status if already completed
+          if (isCompleted) {
+            const statusText = this.add.text(centerX, centerY + 20, 'ALREADY COMPLETED', {
+              fontSize: '24px',
+              color: '#ff6666',
+              fontStyle: 'bold'
+            }).setOrigin(0.5);
+            this.bossIntroTimers.push(this.time.delayedCall(2000, () => statusText.destroy()));
+          }
           // Start countdown after brief pause
           const delay = this.time.delayedCall(350, () => this.runBossCountdown(type), undefined, this);
           this.bossIntroTimers.push(delay);
@@ -623,7 +645,13 @@ export class WaveScene extends Phaser.Scene {
     if (IS_DEV) console.log('Boss hit', { dmg, before, after, dead });
     this.updateBossHealthUI();
     if (dead) {
-      this.score += (this.boss as Boss).getScoreValue();
+      // Only add to current wave score if the wave hasn't been completed yet
+      const waveNum = this.waveManager.getCurrentWave();
+      if (!this.scoreManager.isWaveCompleted(waveNum)) {
+        this.currentWaveScore += (this.boss as Boss).getScoreValue();
+      }
+      // Complete the boss wave
+      this.completeCurrentWave(true);
       // Reward snacks for defeating a boss
       addSnacks(1);
       this.gameUI.updateSnacks(getSnacks());
@@ -673,22 +701,36 @@ export class WaveScene extends Phaser.Scene {
     const waveSettings = this.waveManager.getCurrentWaveSettings();
     const centerX = this.scale.width / 2;
     const centerY = this.scale.height / 2;
+    const isCompleted = this.scoreManager.isWaveCompleted(waveSettings.waveNumber);
 
     this.waveText = this.add.text(centerX, centerY - 50, `WAVE ${waveSettings.waveNumber}`, {
       fontSize: '48px',
-      color: '#ffff00',
+      color: isCompleted ? '#888888' : '#ffff00',
       fontStyle: 'bold'
     }).setOrigin(0.5);
 
     const titleText = this.add.text(centerX, centerY + 10, waveSettings.title.toUpperCase(), {
       fontSize: '28px',
-      color: '#ffffff',
+      color: isCompleted ? '#666666' : '#ffffff',
       fontStyle: 'bold'
     }).setOrigin(0.5);
 
+    // Add completion status text
+    let statusText: Phaser.GameObjects.Text | undefined;
+    if (isCompleted) {
+      statusText = this.add.text(centerX, centerY + 50, 'ALREADY COMPLETED', {
+        fontSize: '20px',
+        color: '#ff6666',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+    }
+
     // Animate notification
+    const targets = [this.waveText, titleText];
+    if (statusText) targets.push(statusText);
+    
     this.tweens.add({
-      targets: [this.waveText, titleText],
+      targets,
       alpha: { from: 0, to: 1 },
       scale: { from: 0.5, to: 1 },
       duration: 500,
@@ -698,13 +740,14 @@ export class WaveScene extends Phaser.Scene {
     // Remove after 3 seconds
     this.time.delayedCall(3000, () => {
       this.tweens.add({
-        targets: [this.waveText, titleText],
+        targets,
         alpha: 0,
         scale: 0.8,
         duration: 300,
         onComplete: () => {
           this.waveText?.destroy();
           titleText.destroy();
+          statusText?.destroy();
         }
       });
     });
@@ -795,7 +838,11 @@ export class WaveScene extends Phaser.Scene {
     const dmg = fromDrone ? Math.max(1, Math.ceil((typeof customDroneDmg === 'number' ? customDroneDmg : playerStats.bulletDamage * 0.5))) : playerStats.bulletDamage;
     const isDead = enemyObj.takeDamage(dmg);
     if (isDead) {
-      this.score += enemyObj.getScoreValue();
+      // Only add to current wave score if the wave hasn't been completed yet
+      const waveNum = this.waveManager.getCurrentWave();
+      if (!this.scoreManager.isWaveCompleted(waveNum)) {
+        this.currentWaveScore += enemyObj.getScoreValue();
+      }
       const isSplitter = (enemyObj as unknown as Phaser.GameObjects.Sprite).texture?.key === 'enemy_splitter';
       const spawnMinis = isSplitter ? GAME_SETTINGS.enemies.splitter.minisOnSplit : 0;
       const ex = (enemyObj as Phaser.GameObjects.Sprite).x;
@@ -811,16 +858,29 @@ export class WaveScene extends Phaser.Scene {
       }
       this.waveManager.onEnemyKilled();
       if (IS_DEV) console.log(`Enemy killed! Wave progress: ${this.waveManager.getWaveProgress().killed}/${this.waveManager.getWaveProgress().total}`);
-      this.gameUI.updateScore(this.score);
+      // Only show current wave score if the wave hasn't been completed yet
+      const currentWaveNum = this.waveManager.getCurrentWave();
+      const displayScore = this.scoreManager.isWaveCompleted(currentWaveNum) 
+        ? this.scoreManager.getTotalScore() 
+        : this.scoreManager.getTotalScore() + this.currentWaveScore;
+      this.gameUI.updateScore(displayScore);
     }
   }
 
   private handlePlayerEnemyCollision(player: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile, enemy: Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Tilemaps.Tile) {
     const enemyObj = enemy as Enemy;
 
-    // Award score for enemy collision
-    this.score += enemyObj.getScoreValue();
-    this.gameUI.updateScore(this.score);
+    // Award score for enemy collision (only if wave not completed)
+    const waveNum = this.waveManager.getCurrentWave();
+    if (!this.scoreManager.isWaveCompleted(waveNum)) {
+      this.currentWaveScore += enemyObj.getScoreValue();
+    }
+    // Only show current wave score if the wave hasn't been completed yet
+    const currentWaveNum = this.waveManager.getCurrentWave();
+    const displayScore = this.scoreManager.isWaveCompleted(currentWaveNum) 
+      ? this.scoreManager.getTotalScore() 
+      : this.scoreManager.getTotalScore() + this.currentWaveScore;
+    this.gameUI.updateScore(displayScore);
 
     // Splitter behavior on collision
     const isSplitter = (enemyObj as unknown as Phaser.GameObjects.Sprite).texture?.key === 'enemy_splitter';
@@ -880,7 +940,7 @@ export class WaveScene extends Phaser.Scene {
     this.gameUI.showGameOver(
       () => this.resetGame(),
       () => this.scene.start('StartMenuScene'),
-      () => this.scene.start('ScoreEntryScene', { score: this.score, time: this.getGameTime(), gameMode: 'wave' })
+      () => this.scene.start('ScoreEntryScene', { score: this.scoreManager.getTotalScore(), time: this.getGameTime(), gameMode: 'wave' })
     );
   }
 
@@ -889,7 +949,7 @@ export class WaveScene extends Phaser.Scene {
 
     this.time.delayedCall(2000, () => {
       this.scene.start('ScoreEntryScene', { 
-        score: this.score, 
+        score: this.scoreManager.getTotalScore(), 
         time: gameTime,
         gameMode: 'wave' // Identify this as wave mode
       });
@@ -923,7 +983,7 @@ export class WaveScene extends Phaser.Scene {
       if (bullet.body) {
         bullet.body.velocity.set(dirX * playerStats.bulletSpeed, dirY * playerStats.bulletSpeed);
       } else {
-        this.scene.physics.moveTo(bullet as unknown as Phaser.GameObjects.GameObject, spawnX + dirX * 10, spawnY + dirY * 10, playerStats.bulletSpeed);
+        this.physics.moveTo(bullet as unknown as Phaser.GameObjects.GameObject, spawnX + dirX * 10, spawnY + dirY * 10, playerStats.bulletSpeed);
       }
 
       // Safety TTL to prevent rare stuck bullets
@@ -1028,8 +1088,17 @@ export class WaveScene extends Phaser.Scene {
           enemySprite.y > this.scale.height + margin) {
         // During boss waves, do not count off-screen enemies as kills
         if (!this.boss || !this.boss.active) {
-          this.score += enemySprite.getScoreValue();
-          this.gameUI.updateScore(this.score);
+          // Only add to current wave score if the wave hasn't been completed yet
+          const waveNum = this.waveManager.getCurrentWave();
+          if (!this.scoreManager.isWaveCompleted(waveNum)) {
+            this.currentWaveScore += enemySprite.getScoreValue();
+          }
+          // Only show current wave score if the wave hasn't been completed yet
+          const currentWaveNum = this.waveManager.getCurrentWave();
+          const displayScore = this.scoreManager.isWaveCompleted(currentWaveNum) 
+            ? this.scoreManager.getTotalScore() 
+            : this.scoreManager.getTotalScore() + this.currentWaveScore;
+          this.gameUI.updateScore(displayScore);
           this.waveManager.onEnemyKilled();
           if (IS_DEV) console.log(`Enemy went off-screen! Wave progress: ${this.waveManager.getWaveProgress().killed}/${this.waveManager.getWaveProgress().total}`);
         }
@@ -1057,13 +1126,72 @@ export class WaveScene extends Phaser.Scene {
     }
   }
 
+  private updateWaveProgressDisplay() {
+    const progress = this.scoreManager.getProgress();
+    const currentWave = this.waveManager.getCurrentWave();
+    this.gameUI.updateWaveProgress(progress.completedWaves, progress.highestWave, currentWave);
+  }
+
   private getGameTime(): number {
     return Math.floor((Date.now() - this.gameStartTime) / 1000);
   }
 
+  private async completeCurrentWave(isBoss: boolean = false): Promise<void> {
+    const currentWave = this.waveManager.getCurrentWave();
+    const waveSettings = this.waveManager.getCurrentWaveSettings();
+    
+    // Calculate base score for the wave
+    let finalScore = this.currentWaveScore;
+    
+    if (isBoss) {
+      // Boss waves get their base score plus any additional score from adds
+      const baseScore = ScoreManager.calculateWaveBaseScore(currentWave, true, waveSettings.bossType);
+      finalScore = Math.max(finalScore, baseScore);
+    } else {
+      // Regular waves get base score plus efficiency bonus
+      const waveProgress = this.waveManager.getWaveProgress();
+      const timeElapsed = Math.floor((Date.now() - this.waveStartTime) / 1000);
+      const baseScore = ScoreManager.calculateWaveBaseScore(currentWave, false);
+      const efficiencyBonus = ScoreManager.calculateEfficiencyBonus(baseScore, waveProgress.killed, waveProgress.spawned, timeElapsed);
+      finalScore = Math.max(finalScore, baseScore + efficiencyBonus);
+    }
+
+    // Try to complete the wave in the score manager
+    const success = await this.scoreManager.completeWave(
+      currentWave, 
+      finalScore, 
+      isBoss, 
+      waveSettings.bossType
+    );
+
+    if (success) {
+      this.score += finalScore;
+      this.gameUI.updateScore(this.score);
+      this.updateWaveProgressDisplay(); // Update progress display
+      if (IS_DEV) console.log(`Wave ${currentWave} completed! Score: ${finalScore} (${isBoss ? 'Boss' : 'Regular'})`);
+    } else {
+      // Wave already completed - reset currentWaveScore and update UI to show only total score
+      this.currentWaveScore = 0;
+      this.gameUI.updateScore(this.scoreManager.getTotalScore());
+      this.updateWaveProgressDisplay();
+      if (IS_DEV) console.log(`Wave ${currentWave} already completed, no score added`);
+    }
+  }
+
+
+  private updateProgressDisplay(): void {
+    const progress = this.scoreManager.getProgress();
+    this.gameUI.updateWaveProgress(
+      progress.completedWaves,
+      progress.highestWave,
+      this.waveManager.getCurrentWave()
+    );
+  }
+
   private resetGame() {
     this.gameOver = false;
-    this.score = 0;
+    this.score = this.scoreManager.getTotalScore(); // Reset to total completed score
+    this.currentWaveScore = 0; // Reset current wave score
 
     // Refresh player stats in case upgrades were purchased
     this.initializePlayerStats();
