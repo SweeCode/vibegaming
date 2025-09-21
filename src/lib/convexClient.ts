@@ -1,4 +1,5 @@
 import { ConvexClient } from 'convex/browser'
+import { getGuestId, getOrCreateGuestIdentity, type GuestIdentity, getStoredPlayerName, setStoredPlayerName } from './guestIdentity'
 
 let client: ConvexClient | null = null
 
@@ -11,41 +12,27 @@ export function getConvexClient(): ConvexClient | null {
   return client
 }
 
+export type ClientIdentity = GuestIdentity
+
 export function getDeviceId(): string {
-  if (typeof window === 'undefined') return 'server'
-  const key = 'deviceId'
-  let id = localStorage.getItem(key)
-  if (!id) {
-    id = crypto.randomUUID()
-    localStorage.setItem(key, id)
-  }
-  return id
+  return getGuestId()
 }
 
-export type ClientIdentity = { deviceId: string; createdAt: number; name?: string }
-
 export function getOrCreateIdentity(): ClientIdentity {
-  if (typeof window === 'undefined') return { deviceId: 'server', createdAt: Date.now() }
-  const key = 'clientIdentity'
-  const existing = localStorage.getItem(key)
-  if (existing) return JSON.parse(existing) as ClientIdentity
-  const identity: ClientIdentity = { deviceId: getDeviceId(), createdAt: Date.now() }
-  localStorage.setItem(key, JSON.stringify(identity))
-  return identity
+  return getOrCreateGuestIdentity()
 }
 
 export function getCurrentUserKey(): string {
-  // Placeholder for future auth-based identity. For now, deviceId is the user key.
-  return getDeviceId()
+  return getGuestId()
 }
 
 type PublicScore = { name: string; score: number; time: number; createdAt: number }
 
 export async function fetchTopScoresConvex(mode: 'endless' | 'wave', limit = 50): Promise<Array<PublicScore> | null> {
-  const client = getConvexClient()
-  if (!client) return null
+  const convex = getConvexClient()
+  if (!convex) return null
   try {
-    const result = await (client as unknown as { query: (name: string, args: unknown) => Promise<unknown> }).query(
+    const result = await (convex as unknown as { query: (name: string, args: unknown) => Promise<unknown> }).query(
       'leaderboard:topScores',
       { mode, limit }
     )
@@ -56,12 +43,12 @@ export async function fetchTopScoresConvex(mode: 'endless' | 'wave', limit = 50)
 }
 
 export async function submitScoreConvex(args: { name: string; score: number; time: number; mode: 'endless' | 'wave' }): Promise<void> {
-  const client = getConvexClient()
-  if (!client) return
+  const convex = getConvexClient()
+  if (!convex) return
   try {
-    await (client as unknown as { mutation: (name: string, args: unknown) => Promise<unknown> }).mutation('leaderboard:submitScore', {
+    await (convex as unknown as { mutation: (name: string, args: unknown) => Promise<unknown> }).mutation('leaderboard:submitScore', {
       ...args,
-      deviceId: getDeviceId()
+      deviceId: getGuestId()
     })
   } catch {
     // ignore network errors; local cache already updated
@@ -78,12 +65,12 @@ export type UpgradeLevelsPayload = {
 }
 
 export async function loadUpgradesConvex(): Promise<UpgradeLevelsPayload | null> {
-  const client = getConvexClient()
-  if (!client) return null
+  const convex = getConvexClient()
+  if (!convex) return null
   try {
-    const result = await (client as unknown as { query: (name: string, args: unknown) => Promise<unknown> }).query(
+    const result = await (convex as unknown as { query: (name: string, args: unknown) => Promise<unknown> }).query(
       'upgrades:getUpgrades',
-      { deviceId: getDeviceId() }
+      { deviceId: getGuestId() }
     )
     if (result && typeof result === 'object') return result as UpgradeLevelsPayload
     return null
@@ -93,12 +80,12 @@ export async function loadUpgradesConvex(): Promise<UpgradeLevelsPayload | null>
 }
 
 export async function saveUpgradesConvex(levels: UpgradeLevelsPayload): Promise<void> {
-  const client = getConvexClient()
-  if (!client) return
+  const convex = getConvexClient()
+  if (!convex) return
   try {
-    await (client as unknown as { mutation: (name: string, args: unknown) => Promise<unknown> }).mutation(
+    await (convex as unknown as { mutation: (name: string, args: unknown) => Promise<unknown> }).mutation(
       'upgrades:saveUpgrades',
-      { deviceId: getDeviceId(), levels }
+      { deviceId: getGuestId(), levels }
     )
   } catch {
     // ignore
@@ -113,10 +100,10 @@ export type SkillTreeStatePayload = {
 }
 
 export async function loadSkillTreeConvex(): Promise<SkillTreeStatePayload | null> {
-  const client = getConvexClient()
-  if (!client) return null
+  const convex = getConvexClient()
+  if (!convex) return null
   try {
-    const result = await (client as unknown as { query: (name: string, args: unknown) => Promise<unknown> }).query(
+    const result = await (convex as unknown as { query: (name: string, args: unknown) => Promise<unknown> }).query(
       'skillTree:getSkillTree',
       { userKey: getCurrentUserKey() }
     )
@@ -128,10 +115,10 @@ export async function loadSkillTreeConvex(): Promise<SkillTreeStatePayload | nul
 }
 
 export async function saveSkillTreeConvex(state: SkillTreeStatePayload): Promise<void> {
-  const client = getConvexClient()
-  if (!client) return
+  const convex = getConvexClient()
+  if (!convex) return
   try {
-    await (client as unknown as { mutation: (name: string, args: unknown) => Promise<unknown> }).mutation(
+    await (convex as unknown as { mutation: (name: string, args: unknown) => Promise<unknown> }).mutation(
       'skillTree:saveSkillTree',
       { userKey: getCurrentUserKey(), state }
     )
@@ -139,3 +126,5 @@ export async function saveSkillTreeConvex(state: SkillTreeStatePayload): Promise
     // ignore
   }
 }
+
+export { getGuestId, getStoredPlayerName, setStoredPlayerName }
