@@ -32,7 +32,6 @@ All notable changes to this project will be documented in this file.
 - Pet settings, appearance, snacks, and upgrade levels hydrate from/sync to Convex via the shared pet state store, ensuring consistent pet loadouts beyond a single browser
 
 ### Added
-- Convex backend modules and tables for pet state (`petStates`) and saved skill builds (`skillBuilds`), plus browser helpers to access them (`pets.ts`, `skillBuilds.ts`, `petStateStore`)
 - **Pet System**: Comprehensive pet management and customization system
   - PetScene for managing pet settings and configurations
   - Pet unlock system requiring level 10 achievement
@@ -74,6 +73,7 @@ All notable changes to this project will be documented in this file.
 - Leaderboard positioning: moved below mode switching buttons for full visibility
 
 ### Changed
+- High score flow now reuses/persists the stored player name through the guest session helpers so localStorage and Convex stay aligned.
 - **Pet System Integration**: Enhanced pet functionality throughout the game
   - Pet drone now supports configurable fire rate in constructor
   - Player shield detection method added for pet system integration
