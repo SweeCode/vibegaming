@@ -38,7 +38,7 @@ A modern web-based space shooter game built with Next.js, TypeScript, and Phaser
 ```bash
 # Clone the repository
 git clone <your-repo-url>
-cd my-app
+cd space-shapes
 
 # Install dependencies
 npm install
