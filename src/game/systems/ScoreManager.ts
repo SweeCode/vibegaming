@@ -20,10 +20,14 @@ export class ScoreManager {
   private currentSessionScore = 0;
   private deviceId: string;
   private isLoading = false;
+  private hasLoaded = false;
+  private readyPromise: Promise<void>;
 
   constructor() {
     this.deviceId = getDeviceId();
-    this.loadProgress();
+    this.readyPromise = this.loadProgress().finally(() => {
+      this.hasLoaded = true;
+    });
   }
 
   /**
@@ -118,6 +122,14 @@ export class ScoreManager {
       highestWave: this.getHighestWave(),
       waveScores: this.getAllWaveScores()
     };
+  }
+
+  isLoaded(): boolean {
+    return this.hasLoaded;
+  }
+
+  async waitUntilLoaded(): Promise<void> {
+    await this.readyPromise;
   }
 
   /**
