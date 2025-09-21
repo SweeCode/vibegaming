@@ -2,6 +2,11 @@ import * as Phaser from 'phaser'
 
 export class PetScene extends Phaser.Scene {
   private uiContainer?: Phaser.GameObjects.Container
+  private previewBody?: Phaser.GameObjects.Graphics
+  private previewEyes?: Phaser.GameObjects.Graphics
+  private activeTab: 'upgrades' | 'appearance' = 'upgrades'
+  private upgradesGroup?: Phaser.GameObjects.Container
+  private appearanceGroup?: Phaser.GameObjects.Container
 
   constructor() {
     super({ key: 'PetScene' })
@@ -19,17 +24,31 @@ export class PetScene extends Phaser.Scene {
       .setStrokeStyle(2, 0x00ffff, 0.6)
 
     const title = this.add
-      .text(centerX, centerY - 220, 'PET SETTINGS', { fontSize: '36px', color: '#00ffff', fontStyle: 'bold' })
+      .text(centerX, centerY - 230, 'PET SETTINGS', { fontSize: '36px', color: '#00ffff', fontStyle: 'bold' })
       .setOrigin(0.5)
+
+    // Tabs within Pet menu
+    const tabUp = this.add.text(centerX - 120, centerY - 185, 'UPGRADES', { fontSize: '16px', color: '#ffffaa', backgroundColor: '#003355', padding: { x: 10, y: 6 } }).setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+    const tabAp = this.add.text(centerX + 120, centerY - 185, 'APPEARANCE', { fontSize: '16px', color: '#dddddd', backgroundColor: '#002233', padding: { x: 10, y: 6 } }).setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+    const setTab = (which: 'upgrades' | 'appearance') => {
+      this.activeTab = which
+      tabUp.setColor(which === 'upgrades' ? '#ffffaa' : '#dddddd')
+      tabAp.setColor(which === 'appearance' ? '#ffffaa' : '#dddddd')
+      this.upgradesGroup?.setVisible(which === 'upgrades')
+      this.appearanceGroup?.setVisible(which === 'appearance')
+    }
 
     // Load modifiers and settings
     const loadCapsAndSettings = async () => {
       const { UpgradeManager } = await import('../systems/UpgradeManager')
       const mgr = new UpgradeManager()
       const mods = mgr.getModifiers()
-      const { loadPetSettings, savePetSettings } = await import('../systems/petSettings')
+      const { loadPetSettings, savePetSettings, loadPetAppearance, savePetAppearance, ensurePetStateReady } = await import('../systems/petSettings')
+      await ensurePetStateReady()
       const current = loadPetSettings(mods)
-      const { getSnacks, tryPurchase, getUpgradeCost, getUpgrades, getMaxLevel } = await import('../systems/petUpgrades')
+      const { getSnacks, getUpgradeCost, getUpgrades, getMaxLevel, setLevel, resetAllWithRefund, getSelectedLevels, setSelectedLevel } = await import('../systems/petUpgrades')
 
       const labelsStyle = { fontSize: '18px', color: '#ffffff' } as Phaser.Types.GameObjects.Text.TextStyle
       const valueStyle = { fontSize: '18px', color: '#ffff00' } as Phaser.Types.GameObjects.Text.TextStyle
@@ -123,18 +142,34 @@ export class PetScene extends Phaser.Scene {
 
       saveBtn.on('pointerdown', () => {
         savePetSettings(current)
+        savePetAppearance(app)
         this.cameras.main.flash(150, 0, 255, 180)
       })
       backBtn.on('pointerdown', () => this.scene.start('StartMenuScene'))
 
       // Snacks header and counters
-      const snacksText = this.add.text(centerX, centerY - 200, `Snacks: ${getSnacks()}`, { fontSize: '20px', color: '#ffff66', fontStyle: 'bold' }).setOrigin(0.5)
+      const snacksText = this.add.text(centerX, centerY - 190, `Snacks: ${getSnacks()}`, { fontSize: '22px', color: '#ffff66', fontStyle: 'bold' }).setOrigin(0.5)
+
+      // Sleek reset button tucked in top-right of panel
+      const resetBtn = this.add.text(panel.x + panel.width / 2 - 60, panel.y - panel.height / 2 + 16, '↺ Reset', {
+        fontSize: '14px', color: '#ffffff', backgroundColor: '#333333', padding: { x: 8, y: 4 }
+      }).setOrigin(1, 0)
+        .setAlpha(0.75)
+        .setInteractive({ useHandCursor: true })
+      resetBtn.on('pointerover', () => resetBtn.setAlpha(1))
+      resetBtn.on('pointerout', () => resetBtn.setAlpha(0.75))
+      resetBtn.on('pointerdown', () => {
+        const { snacks } = resetAllWithRefund()
+        this.cameras.main.flash(150, 200, 255, 200)
+        snacksText.setText(`Snacks: ${snacks}`)
+        refreshUpgradesUI()
+      })
 
       // Pet upgrades section
-      const upgHeader = this.add.text(centerX, centerY + 20, 'PET UPGRADES (COST: snacks)', { fontSize: '20px', color: '#aeefff', fontStyle: 'bold' }).setOrigin(0.5)
+      const upgHeader = this.add.text(centerX, centerY + 40, 'PET UPGRADES', { fontSize: '20px', color: '#aeefff', fontStyle: 'bold' }).setOrigin(0.5)
 
       const leftUpgX = centerX - 260
-      const upgY0 = centerY + 60
+      const upgY0 = centerY + 85
       const rowH = 34
 
       type Row = { label: string; kind: keyof ReturnType<typeof getUpgrades>; y: number }
@@ -147,53 +182,151 @@ export class PetScene extends Phaser.Scene {
 
       const refreshUpgradesUI = () => {
         const u = getUpgrades()
+        const s = getSelectedLevels()
         snacksText.setText(`Snacks: ${getSnacks()}`)
         for (const r of rows) {
           const lvlText = this.children.getByName(`lvl_${r.kind}`) as Phaser.GameObjects.Text | null
           const costText = this.children.getByName(`cost_${r.kind}`) as Phaser.GameObjects.Text | null
-          const btn = this.children.getByName(`btn_${r.kind}`) as Phaser.GameObjects.Text | null
+          const dec = this.children.getByName(`dec_${r.kind}`) as Phaser.GameObjects.Text | null
+          const inc = this.children.getByName(`inc_${r.kind}`) as Phaser.GameObjects.Text | null
           const level = u[r.kind]
           const max = getMaxLevel(r.kind)
           const atMax = level >= max
           const cost = getUpgradeCost(r.kind, level)
           lvlText?.setText(`Lv ${level}/${max}`)
-          costText?.setText(atMax ? 'MAX' : `Cost: ${cost}`)
-          btn?.setText(atMax ? 'MAXED' : 'BUY')
-            .setStyle({ backgroundColor: atMax ? '#333333' : '#004400', color: atMax ? '#888888' : '#ffffff' })
-          if (btn) btn.disableInteractive()
-          if (!atMax) btn?.setInteractive({ useHandCursor: true })
+          costText?.setText(atMax ? 'MAX' : `Next: ${cost}`)
+          const sel = s[r.kind]
+          if (dec) {
+            const canSelDec = sel > 0
+            dec.setAlpha(canSelDec ? 1 : 0.4)
+            if (canSelDec) {
+              dec.setInteractive({ useHandCursor: true })
+            } else {
+              dec.disableInteractive()
+            }
+          }
+          if (inc) {
+            const canSelInc = sel < level
+            inc.setAlpha(canSelInc ? 1 : 0.4)
+            if (canSelInc) {
+              inc.setInteractive({ useHandCursor: true })
+            } else {
+              inc.disableInteractive()
+            }
+          }
         }
       }
 
       // Collect created upgrade UI elements so we can add them into the same container
-      const upgElements: Phaser.GameObjects.Text[] = []
+      const upgElements: Phaser.GameObjects.GameObject[] = []
       for (const r of rows) {
         const label = this.add.text(leftUpgX, r.y, r.label, { fontSize: '16px', color: '#ffffff' }).setOrigin(0, 0.5)
         const lvlText = this.add.text(leftUpgX + 260, r.y, '', { fontSize: '16px', color: '#ffff00' }).setOrigin(0, 0.5)
         lvlText.setName(`lvl_${r.kind}`)
         const costText = this.add.text(leftUpgX + 360, r.y, '', { fontSize: '14px', color: '#cccccc' }).setOrigin(0, 0.5)
         costText.setName(`cost_${r.kind}`)
-        const btn = this.add.text(leftUpgX + 460, r.y, 'BUY', { fontSize: '14px', color: '#ffffff', backgroundColor: '#004400', padding: { x: 10, y: 4 } }).setOrigin(0.5)
-        btn.setName(`btn_${r.kind}`)
-        btn.on('pointerdown', () => {
-          const res = tryPurchase(r.kind)
-          if (res.success) {
-            this.cameras.main.flash(120, 180, 255, 200)
-            refreshUpgradesUI()
-          } else {
-            this.cameras.main.shake(120, 0.004)
-          }
+        const dec = this.add.text(leftUpgX + 500 - 30, r.y, '−', { fontSize: '20px', color: '#ffffff', backgroundColor: '#333333', padding: { x: 8, y: 2 } }).setOrigin(0.5)
+        dec.setName(`dec_${r.kind}`)
+        dec.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+          // Tuning only: adjust selected level down (cannot go below 0)
+          const s = getSelectedLevels()
+          const res = setSelectedLevel(r.kind, s[r.kind] - 1)
+          if (res.success) { refreshUpgradesUI() }
         })
-        upgElements.push(label, lvlText, costText, btn)
+        const inc = this.add.text(leftUpgX + 500 + 30, r.y, '+', { fontSize: '20px', color: '#ffffff', backgroundColor: '#004400', padding: { x: 8, y: 2 } }).setOrigin(0.5)
+        inc.setName(`inc_${r.kind}`)
+        inc.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+          // Tuning only: adjust selected level up (bounded by purchased)
+          const s = getSelectedLevels()
+          const res = setSelectedLevel(r.kind, s[r.kind] + 1)
+          if (res.success) { refreshUpgradesUI() }
+        })
+        // Upgrade (apply) button (placed where the old selected slider was)
+        const buyBtn = this.add.text(leftUpgX + 620, r.y, 'UPGRADE', { fontSize: '14px', color: '#ffffff', backgroundColor: '#005599', padding: { x: 10, y: 6 } }).setOrigin(0.5)
+          .setInteractive({ useHandCursor: true })
+          .on('pointerdown', () => {
+            const u = getUpgrades()
+            const level = u[r.kind]
+            const max = getMaxLevel(r.kind)
+            if (level >= max) return
+            const cost = getUpgradeCost(r.kind, level)
+            if (getSnacks() < cost) { this.cameras.main.shake(80, 0.003); return }
+            const res = setLevel(r.kind, level + 1)
+            if (res.success) { this.cameras.main.flash(100, 180, 255, 200); refreshUpgradesUI() }
+          })
+        upgElements.push(label, lvlText, costText, dec, inc, buyBtn)
       }
 
       refreshUpgradesUI()
 
-      // Group for cleanup
-      this.uiContainer = this.add.container(0, 0, [
-        bg,
-        panel,
-        title,
+      // Appearance customization UI (own group with extra spacing)
+      const appHeader = this.add.text(centerX, centerY - 30, 'APPEARANCE', { fontSize: '22px', color: '#aeefff', fontStyle: 'bold' }).setOrigin(0.5)
+      const app = loadPetAppearance()
+
+      // Preview
+      const pvX = centerX
+      const pvY = centerY + 10
+      this.previewBody = this.add.graphics({ x: pvX, y: pvY })
+      this.previewEyes = this.add.graphics({ x: pvX, y: pvY })
+      const drawPreview = () => {
+        const size = 12
+        const half = size / 2
+        this.previewBody!.clear(); this.previewEyes!.clear()
+        this.previewBody!.fillStyle(app.bodyColor, 1)
+        this.previewBody!.lineStyle(1, 0x000000, 0.2)
+        if (app.shape === 'square') {
+          this.previewBody!.fillRect(-half, -half, size, size)
+          this.previewBody!.strokeRect(-half, -half, size, size)
+        } else if (app.shape === 'triangle') {
+          this.previewBody!.beginPath(); this.previewBody!.moveTo(0, -half); this.previewBody!.lineTo(half, half); this.previewBody!.lineTo(-half, half); this.previewBody!.closePath(); this.previewBody!.fillPath(); this.previewBody!.strokePath()
+        } else {
+          this.previewBody!.fillCircle(0, 0, half)
+          this.previewBody!.strokeCircle(0, 0, half)
+        }
+        const eyeY = -half * 0.2
+        if (app.eyeStyle === 'bar') {
+          this.previewEyes!.fillStyle(0x111111, 0.6)
+          this.previewEyes!.fillRect(-half * 0.6, eyeY - 1, half * 1.2, 2)
+        } else if (app.eyeStyle === 'glow') {
+          this.previewEyes!.fillStyle(0xffffaa, 0.9)
+          this.previewEyes!.fillCircle(0, eyeY, 2)
+          this.previewEyes!.fillStyle(0xffffaa, 0.25)
+          this.previewEyes!.fillCircle(0, eyeY, 4)
+        } else {
+          this.previewEyes!.fillStyle(0x111111, 0.9)
+          this.previewEyes!.fillCircle(-3, eyeY, 1)
+          this.previewEyes!.fillCircle(3, eyeY, 1)
+        }
+      }
+      drawPreview()
+
+      // Color presets (centered)
+      const colors = [0x66ccff, 0xff6666, 0x66ff99, 0xffdd66, 0xbb88ff]
+      const colorBoxes: Phaser.GameObjects.Rectangle[] = []
+      colors.forEach((c, i) => {
+        const box = this.add.rectangle(centerX - 70 + i * 35, centerY + 30, 24, 24, c).setOrigin(0.5).setStrokeStyle(1, 0xffffff, 0.6)
+        box.setInteractive({ useHandCursor: true }).on('pointerdown', () => { app.bodyColor = c; drawPreview() })
+        colorBoxes.push(box)
+      })
+      const shapeText = this.add.text(centerX - 140, centerY + 90, 'Shape:', { fontSize: '14px', color: '#cccccc' }).setOrigin(0, 0.5)
+      const shapeOpts = ['circle', 'triangle', 'square'] as const
+      const shapeButtons: Phaser.GameObjects.Text[] = []
+      shapeOpts.forEach((s, idx) => {
+        const t = this.add.text(centerX - 60 + idx * 90, centerY + 90, s, { fontSize: '14px', color: app.shape === s ? '#ffffaa' : '#dddddd', backgroundColor: app.shape === s ? '#224422' : undefined, padding: app.shape === s ? { x: 6, y: 2 } : undefined }).setOrigin(0.5)
+        t.setInteractive({ useHandCursor: true }).on('pointerdown', () => { app.shape = s; drawPreview(); shapeButtons.forEach(b => b.setColor('#dddddd')); t.setColor('#ffffaa') })
+        shapeButtons.push(t)
+      })
+      const eyeText = this.add.text(centerX - 140, centerY + 120, 'Eyes:', { fontSize: '14px', color: '#cccccc' }).setOrigin(0, 0.5)
+      const eyeOpts = ['dot', 'bar', 'glow'] as const
+      const eyeButtons: Phaser.GameObjects.Text[] = []
+      eyeOpts.forEach((s, idx) => {
+        const t = this.add.text(centerX - 60 + idx * 80, centerY + 120, s, { fontSize: '14px', color: app.eyeStyle === s ? '#ffffaa' : '#dddddd', backgroundColor: app.eyeStyle === s ? '#224422' : undefined, padding: app.eyeStyle === s ? { x: 6, y: 2 } : undefined }).setOrigin(0.5)
+        t.setInteractive({ useHandCursor: true }).on('pointerdown', () => { app.eyeStyle = s; drawPreview(); eyeButtons.forEach(b => b.setColor('#dddddd')); t.setColor('#ffffaa') })
+        eyeButtons.push(t)
+      })
+
+      // Build groups
+      this.upgradesGroup = this.add.container(0, 0, [
         unlocksHeader,
         unlockText,
         futureText,
@@ -207,12 +340,41 @@ export class PetScene extends Phaser.Scene {
         dmgText,
         dmgDec,
         dmgInc,
-        saveBtn,
-        backBtn,
+        resetBtn,
         snacksText,
         upgHeader,
         ...upgElements
       ])
+
+      this.appearanceGroup = this.add.container(0, 0, [
+        appHeader,
+        this.previewBody!,
+        this.previewEyes!,
+        ...colorBoxes,
+        shapeText,
+        ...shapeButtons,
+        eyeText,
+        ...eyeButtons
+      ])
+
+      // Root container
+      this.uiContainer = this.add.container(0, 0, [
+        bg,
+        panel,
+        title,
+        tabUp,
+        tabAp,
+        // settings controls added only in upgrades tab group
+        saveBtn,
+        backBtn,
+        this.upgradesGroup,
+        this.appearanceGroup
+      ])
+
+      // Initialize tab state
+      tabUp.on('pointerdown', () => setTab('upgrades'))
+      tabAp.on('pointerdown', () => setTab('appearance'))
+      setTab('upgrades')
     }
 
     void loadCapsAndSettings()

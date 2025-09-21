@@ -1,6 +1,29 @@
 import { defineSchema, defineTable } from 'convex/server'
 import { v } from 'convex/values'
 
+const petSettingsValidator = v.object({
+  fireRateMs: v.number(),
+  damage: v.number()
+})
+
+const petAppearanceValidator = v.object({
+  bodyColor: v.number(),
+  eyeStyle: v.union(v.literal('dot'), v.literal('bar'), v.literal('glow')),
+  shape: v.union(v.literal('circle'), v.literal('triangle'), v.literal('square'))
+})
+
+const petLevelsValidator = v.object({
+  fireRateLevel: v.number(),
+  damageLevel: v.number(),
+  bulletSpeedLevel: v.number(),
+  bulletSizeLevel: v.number()
+})
+
+const skillBuildSnapshotValidator = v.object({
+  unlocked: v.record(v.string(), v.number()),
+  totalSpent: v.number()
+})
+
 export default defineSchema({
   scores: defineTable({
     name: v.string(),
@@ -64,4 +87,24 @@ export default defineSchema({
     bossType: v.optional(v.union(v.literal('sentinel'), v.literal('artillery'))),
     updatedAt: v.number()
   }).index('by_device_wave', ['deviceId', 'waveNumber'])
+  ,
+  petStates: defineTable({
+    deviceId: v.string(),
+    settings: petSettingsValidator,
+    appearance: petAppearanceValidator,
+    snacks: v.number(),
+    upgrades: petLevelsValidator,
+    selectedLevels: petLevelsValidator,
+    bestLevel: v.number(),
+    petUnlocked: v.boolean(),
+    updatedAt: v.number()
+  }).index('by_device', ['deviceId'])
+  ,
+  skillBuilds: defineTable({
+    userKey: v.string(),
+    slot: v.number(),
+    name: v.string(),
+    snapshot: skillBuildSnapshotValidator,
+    updatedAt: v.number()
+  }).index('by_user_slot', ['userKey', 'slot'])
 })
