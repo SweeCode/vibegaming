@@ -2,11 +2,12 @@ import * as Phaser from 'phaser';
 import { IS_DEV } from '../config/gameConfig';
 import { fetchTopScoresConvex } from '@/lib/convexClient';
 import { ScoreManager } from '../systems/ScoreManager';
+import { getBestLevel, isPetUnlockedFlag, markPetUnlocked } from '../systems/petSettings';
 
 export class StartMenuScene extends Phaser.Scene {
   private startButton!: Phaser.GameObjects.Text;
   private optionsButton!: Phaser.GameObjects.Text;
-  private petButton?: Phaser.GameObjects.Text;
+  private petButton!: Phaser.GameObjects.Text;
   private leaderboardButton!: Phaser.GameObjects.Text;
   private gameModesButton?: Phaser.GameObjects.Text;
   private titleText!: Phaser.GameObjects.Text;
@@ -29,6 +30,8 @@ export class StartMenuScene extends Phaser.Scene {
   private currentLeaderboardMode: 'endless' | 'wave' = 'endless';
   private scoreManager?: ScoreManager;
   private petOverlay?: Phaser.GameObjects.Container;
+  private petButtonState: 'loading' | 'locked' | 'unlocked' = 'loading';
+  private petRequirementTip?: Phaser.GameObjects.Text;
   // Background FX
   private bgStarsFar?: Phaser.GameObjects.Group;
   private bgStarsNear?: Phaser.GameObjects.Group;
@@ -106,21 +109,23 @@ export class StartMenuScene extends Phaser.Scene {
       .on('pointerout', () => this.leaderboardButton.setStyle({ backgroundColor: '#004444' }));
 
     // Pet Button (locked until level 10, unlocked in dev)
-    const unlocked = IS_DEV || this.isPetUnlocked();
-    this.petButton = this.add.text(centerX, centerY + 100, unlocked ? 'PET' : 'PET (LOCKED)', {
+    this.petButton = this.add.text(centerX, centerY + 100, 'PET (LOADING...)', {
       fontSize: '28px',
-      color: unlocked ? '#00ffff' : '#888888',
-      backgroundColor: unlocked ? '#004466' : '#333333',
+      color: '#cccccc',
+      backgroundColor: '#333333',
       padding: { x: 20, y: 10 }
     }).setOrigin(0.5)
-      .setInteractive({ useHandCursor: unlocked })
-      .on('pointerdown', () => { if (unlocked) this.scene.start('PetScene'); })
-      .on('pointerover', () => { if (unlocked) this.petButton?.setStyle({ backgroundColor: '#006699' }) })
-      .on('pointerout', () => { if (unlocked) this.petButton?.setStyle({ backgroundColor: '#004466' }) });
-    if (!unlocked) {
-      // Tooltip explaining requirement
-      const tip = this.add.text(centerX, centerY + 140, 'Reach level 10 to unlock', { fontSize: '16px', color: '#cccccc' }).setOrigin(0.5).setAlpha(0.85)
-      this.time.delayedCall(3500, () => tip.destroy())
+      .setInteractive({ useHandCursor: false })
+      .on('pointerdown', () => { if (this.petButtonState === 'unlocked') this.scene.start('PetScene'); })
+      .on('pointerover', () => { if (this.petButtonState === 'unlocked') this.petButton?.setStyle({ backgroundColor: '#006699' }); })
+      .on('pointerout', () => { if (this.petButtonState === 'unlocked') this.petButton?.setStyle({ backgroundColor: '#004466' }); });
+
+    this.refreshPetButton();
+
+    if (this.scoreManager) {
+      this.scoreManager.waitUntilLoaded()
+        .then(() => this.refreshPetButton())
+        .catch((error) => console.warn('Failed to refresh pet unlock status:', error));
     }
     // Instructions
     this.add.text(this.scale.width / 2, this.scale.height - 60, 'Ctrl+Shift+R to reset leaderboard', {
@@ -244,23 +249,80 @@ export class StartMenuScene extends Phaser.Scene {
     this.scene.start('CustomizationScene');
   }
 
-    // Pet Button (locked until level 10, unlocked in dev)
-    const unlocked = IS_DEV || this.isPetUnlocked();
-    this.petButton = this.add.text(centerX, centerY + 100, unlocked ? 'PET' : 'PET (LOCKED)', {
+  private refreshPetButton() {
+    if (!this.petButton) return;
+
+    if (IS_DEV || this.isPetUnlocked()) {
+      this.applyPetButtonState('unlocked');
+      return;
+    }
+
+    if (this.scoreManager && !this.scoreManager.isLoaded()) {
+      this.applyPetButtonState('loading');
+      return;
+    }
+
+    this.applyPetButtonState('locked');
+  }
+
+  private applyPetButtonState(state: 'loading' | 'locked' | 'unlocked') {
+    if (!this.petButton) return;
+
+    this.petButtonState = state;
+
+    const config = {
+      loading: { label: 'PET (LOADING...)', color: '#cccccc', backgroundColor: '#333333', cursor: false },
+      locked: { label: 'PET (LOCKED)', color: '#888888', backgroundColor: '#333333', cursor: false },
+      unlocked: { label: 'PET', color: '#00ffff', backgroundColor: '#004466', cursor: true }
+    }[state];
+
+    this.petButton.setText(config.label);
+    this.petButton.setStyle({
       fontSize: '28px',
-      color: unlocked ? '#00ffff' : '#888888',
-      backgroundColor: unlocked ? '#004466' : '#333333',
+      color: config.color,
+      backgroundColor: config.backgroundColor,
       padding: { x: 20, y: 10 }
-    }).setOrigin(0.5)
-      .setInteractive({ useHandCursor: unlocked })
-      .on('pointerdown', () => { if (unlocked) this.scene.start('PetScene'); })
-      .on('pointerover', () => { if (unlocked) this.petButton?.setStyle({ backgroundColor: '#006699' }) })
-      .on('pointerout', () => { if (unlocked) this.petButton?.setStyle({ backgroundColor: '#004466' }) });
-    if (!unlocked) {
-      // Tooltip explaining requirement
-      const tip = this.add.text(centerX, centerY + 140, 'Reach level 10 to unlock', { fontSize: '16px', color: '#cccccc' }).setOrigin(0.5).setAlpha(0.85)
-      this.time.delayedCall(3500, () => tip.destroy())
-    }  }
+    });
+
+    this.petButton.setInteractive({ useHandCursor: config.cursor });
+
+    if (state === 'locked') {
+      if (!this.petRequirementTip || !this.petRequirementTip.active) {
+        const tipX = this.scale.width / 2;
+        const tipY = this.scale.height / 2 + 140;
+        this.petRequirementTip = this.add.text(tipX, tipY, 'Reach level 10 to unlock', {
+          fontSize: '16px',
+          color: '#cccccc'
+        }).setOrigin(0.5).setAlpha(0.85);
+        this.time.delayedCall(3500, () => {
+          this.petRequirementTip?.destroy();
+          this.petRequirementTip = undefined;
+        });
+      }
+    } else if (this.petRequirementTip) {
+      this.petRequirementTip.destroy();
+      this.petRequirementTip = undefined;
+    }
+  }
+
+  private isPetUnlocked(): boolean {
+    if (typeof window === 'undefined') return false
+
+    if (isPetUnlockedFlag()) return true
+
+    if (this.scoreManager?.isLoaded() && this.scoreManager.getHighestWave() >= 10) {
+      markPetUnlocked()
+      return true
+    }
+
+    const bestLevel = getBestLevel()
+    if (bestLevel >= 10) {
+      markPetUnlocked()
+      return true
+    }
+
+    return false
+  }
 
   private showLeaderboard() {
     if (this.showingLeaderboard) return;
