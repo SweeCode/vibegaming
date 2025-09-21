@@ -122,7 +122,8 @@ export const updatePetState = mutation({
         upgrades: existing.upgrades,
         selectedLevels: existing.selectedLevels,
         bestLevel: existing.bestLevel,
-        petUnlocked: existing.petUnlocked
+        petUnlocked: existing.petUnlocked,
+        updatedAt: existing.updatedAt ?? 0
       }
       const merged = mergeState(base, patch as Record<string, unknown>, now)
       await ctx.db.patch(existing._id, { ...merged, updatedAt: now })
