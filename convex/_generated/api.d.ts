@@ -15,6 +15,8 @@ import type {
 } from "convex/server";
 import type * as guestSessions from "../guestSessions.js";
 import type * as leaderboard from "../leaderboard.js";
+import type * as pets from "../pets.js";
+import type * as skillBuilds from "../skillBuilds.js";
 import type * as skillTree from "../skillTree.js";
 import type * as upgrades from "../upgrades.js";
 import type * as waveProgress from "../waveProgress.js";
@@ -30,6 +32,8 @@ import type * as waveProgress from "../waveProgress.js";
 declare const fullApi: ApiFromModules<{
   guestSessions: typeof guestSessions;
   leaderboard: typeof leaderboard;
+  pets: typeof pets;
+  skillBuilds: typeof skillBuilds;
   skillTree: typeof skillTree;
   upgrades: typeof upgrades;
   waveProgress: typeof waveProgress;

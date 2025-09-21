@@ -4,8 +4,34 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Upgrade overhaul
+- Unified skill tree rendered on a single, centered map with distinct paths (basic, defense, special, offense, mobility, hybrid)
+- Pan and zoom on the tree (drag to pan, mouse wheel to zoom); larger spacing between nodes for readability
+- New root node "Awakening" (cost 0). Unlocking it reveals adjacent nodes; prerequisites/affordability now clearly indicated
+- Active vs Passive traits labeled and styled; branch colors standardized with an on-screen legend
+- Background polygons tint each path; unlock FX and pulse feedback for newly available nodes
+- Score-connected unlocking respected (Available Points = total score − total spent)
+- Build management: 3 centered build slots with save/load and naming
+- Tabs within Customization: Customize (avatar only), Skill Tree (full map), Builds (centered cards)
+- **Fixed**: Tooltip and unlock FX positioning for nodes in panned/zoomed tree view
+- **Fixed**: Active/passive trait detection using proper typing instead of 'as any'
+- **Added**: Current stats HUD restored in Customize tab with proper layering
+- **Added**: Point2D interface for type safety in geometry helpers
+- **Fixed**: Build slot name variable scoping so saved builds can be loaded after first save
+- **Fixed**: Wheel event typing and proper handling of pointer events
+- Skill builds now sync to Convex (with localStorage fallback) so named loadouts follow the player across devices
+- Available points pull from the hosted Convex wave totals when present, keeping spendable score in step with cross-session progress
+
+### Pet upgrade and appearance overhaul
+- PetScene split into tabs: UPGRADES and APPEARANCE (no overlap between sections)
+- Upgrades UI: clearer spacing; shows current level and “Next: cost”; minus/plus controls and a dedicated “UPGRADE” button per row
+- Refund/reset: sleek corner Reset button returns all spent snacks on pet upgrades
+- Appearance editor: centered preview with larger color swatches; selectable shape (circle/triangle/square) and eye styles (dot/bar/glow)
+- Drone rendering updated to reflect appearance (color, shape, eyes) with a refresh method for live updates
+- Snacks counter and upgrade rows update immediately after purchases
+- Pet settings, appearance, snacks, and upgrade levels hydrate from/sync to Convex via the shared pet state store, ensuring consistent pet loadouts beyond a single browser
+
 ### Added
-- Guest session scaffolding: local guest identities with Convex-backed `guestSessions` syncing player name, last world visited, spawn position, and health snapshots for future account linking.
 - **Pet System**: Comprehensive pet management and customization system
   - PetScene for managing pet settings and configurations
   - Pet unlock system requiring level 10 achievement

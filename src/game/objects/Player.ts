@@ -1,6 +1,7 @@
 import * as Phaser from 'phaser';
 import { UpgradeManager } from '../systems/UpgradeManager';
 import type { ActiveModifiers } from '../systems/SkillTreeManager';
+import { getPlayerColor } from '../systems/playerAppearance';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   private keys: { [key: string]: Phaser.Input.Keyboard.Key };
@@ -30,6 +31,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.maxHealth = this.playerStats.health;
     
     this.keys = scene.input.keyboard?.addKeys('W,A,S,D') as { [key: string]: Phaser.Input.Keyboard.Key } || {};
+
+    // Apply saved color tint on spawn
+    const color = getPlayerColor();
+    if (typeof color === 'number') {
+      this.setTint(color);
+    }
   }
 
   update() {
@@ -106,6 +113,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.lastDamageAtMs = 0;
     this.regenAccumulatorMs = 0;
     this.clearTint();
+    const color = getPlayerColor();
+    if (typeof color === 'number') {
+      this.setTint(color);
+    }
     // Position will be set by the scene
   }
 

@@ -12,6 +12,7 @@ import { ScoreManager } from '../systems/ScoreManager';
 import { Drone } from '../objects/Drone';
 import { loadPetSettings } from '../systems/petSettings';
 import { ensureGuestSessionInitialized, recordCurrentHealth, recordLastWorldVisited, recordSpawnPosition } from '@/lib/guestSession';
+import { getPlayerColor } from '../systems/playerAppearance';
 
 export class WaveScene extends Phaser.Scene {
   private player!: Player;
@@ -120,7 +121,8 @@ export class WaveScene extends Phaser.Scene {
   }
 
   private createTextures() {
-    const playerGraphics = this.make.graphics({ fillStyle: { color: 0xffffff } }, false);
+    const playerColor = getPlayerColor();
+    const playerGraphics = this.make.graphics({ fillStyle: { color: playerColor } }, false);
     playerGraphics.fillRect(0, 0, 32, 32);
     playerGraphics.generateTexture('player', 32, 32);
     playerGraphics.destroy();
@@ -183,6 +185,11 @@ export class WaveScene extends Phaser.Scene {
     recordLastWorldVisited('wave-mode');
     recordSpawnPosition({ x: this.player.x, y: this.player.y, scene: 'wave-mode' });
     recordCurrentHealth(this.player.getHealth());
+    // Ensure saved tint is applied
+    const color = getPlayerColor();
+    if (typeof color === 'number') {
+      this.player.setTint(color);
+    }
   }
 
   private createBullets() {

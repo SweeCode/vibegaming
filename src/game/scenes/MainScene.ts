@@ -9,6 +9,7 @@ import { UpgradeManager } from '../systems/UpgradeManager';
 import { Drone } from '../objects/Drone';
 import { loadPetSettings } from '../systems/petSettings';
 import { getBulletSpeedMultiplier, getBulletSizeMultiplier, getSnacks } from '../systems/petUpgrades';
+import { getPlayerColor } from '../systems/playerAppearance';
 
 export class MainScene extends Phaser.Scene {
   private player!: Player;
@@ -105,13 +106,14 @@ export class MainScene extends Phaser.Scene {
     miniGraphics.generateTexture('enemy_mini', 14, 14);
     miniGraphics.destroy();
 
-     const enemyBulletG = this.make.graphics(undefined, false);
+    const enemyBulletG = this.make.graphics(undefined, false);
      enemyBulletG.lineStyle(2, 0xFFFFFF, 1);
      enemyBulletG.fillStyle(0xFF0000, 1);
      enemyBulletG.fillCircle(4, 4, 3);
      enemyBulletG.strokeCircle(4, 4, 4);
-     enemyBulletG.generateTexture('enemy_bullet', 8, 8);
-     enemyBulletG.destroy();    const playerGraphics = this.make.graphics({ fillStyle: { color: 0xffffff } }, false);
+    enemyBulletG.generateTexture('enemy_bullet', 8, 8);
+    enemyBulletG.destroy();    const playerColor = getPlayerColor();
+    const playerGraphics = this.make.graphics({ fillStyle: { color: playerColor } }, false);
     playerGraphics.fillRect(0, 0, 32, 32);
     playerGraphics.generateTexture('player', 32, 32);
     playerGraphics.destroy();
@@ -139,6 +141,11 @@ export class MainScene extends Phaser.Scene {
 
   private createPlayer() {
     this.player = new Player(this, this.scale.width / 2, this.scale.height / 2);
+    // Ensure tint is applied even if Player constructor ran before color persisted
+    const color = getPlayerColor();
+    if (typeof color === 'number') {
+      this.player.setTint(color);
+    }
   }
 
   private createInputs() {

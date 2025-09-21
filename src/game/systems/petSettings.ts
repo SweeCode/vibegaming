@@ -1,38 +1,66 @@
 import type { ActiveModifiers } from './SkillTreeManager'
 import { getDamageCapBonus, getFireRateBonusMs } from './petUpgrades'
+import {
+  getPetStateSnapshot,
+  updatePetState,
+  ensurePetStateLoaded,
+  type PetAppearance,
+  type PetSettings
+} from './petStateStore'
 
-export type PetSettings = {
-  fireRateMs: number
-  damage: number
+export type { PetSettings, PetAppearance } from './petStateStore'
+
+const BASE_SETTINGS: PetSettings = { fireRateMs: 600, damage: 3 }
+
+function clampSettings(input: PetSettings, mods?: Partial<ActiveModifiers>): PetSettings {
+  const snapshot = getPetStateSnapshot()
+  const withDefaults = { ...BASE_SETTINGS, ...snapshot.settings, ...input }
+  const fireBonus = getFireRateBonusMs()
+  const minFireRate = Math.max(
+    200,
+    Math.floor(((mods as unknown as { petFireRateMs?: number })?.petFireRateMs ?? withDefaults.fireRateMs) - fireBonus)
+  )
+  const damageCap = Math.max(
+    1,
+    Math.floor((mods?.petDrone?.dps ?? withDefaults.damage) + getDamageCapBonus())
+  )
+  return {
+    fireRateMs: Math.max(minFireRate, Math.floor(withDefaults.fireRateMs)),
+    damage: Math.min(damageCap, Math.max(1, Math.floor(withDefaults.damage)))
+  }
 }
-
-const DEFAULTS: PetSettings = { fireRateMs: 600, damage: 3 }
 
 export function loadPetSettings(mods?: Partial<ActiveModifiers>): PetSettings {
-  let stored: Partial<PetSettings> = {}
-  try {
-    const raw = localStorage.getItem('pet_settings')
-    if (raw) stored = JSON.parse(raw)
-  } catch {}
-  const minRate = Math.max(200, Math.floor(((mods as unknown as { petFireRateMs?: number })?.petFireRateMs || DEFAULTS.fireRateMs) - getFireRateBonusMs()))
-  const maxDmg = Math.max(1, Math.floor((mods?.petDrone?.dps ?? DEFAULTS.damage) + getDamageCapBonus()))
-  const fireRateMs = Math.max(minRate, Math.floor(stored.fireRateMs ?? DEFAULTS.fireRateMs))
-  const damage = Math.min(maxDmg, Math.max(1, Math.floor(stored.damage ?? DEFAULTS.damage)))
-  return { fireRateMs, damage }
+  const snapshot = getPetStateSnapshot()
+  return clampSettings({ ...snapshot.settings }, mods)
 }
 
-export function savePetSettings(settings: PetSettings) {
-  try { localStorage.setItem('pet_settings', JSON.stringify(settings)) } catch {}
+export function savePetSettings(settings: PetSettings, mods?: Partial<ActiveModifiers>): void {
+  const sanitized = clampSettings(settings, mods)
+  updatePetState({ settings: sanitized })
+}
+
+export function loadPetAppearance(): PetAppearance {
+  const snapshot = getPetStateSnapshot()
+  return { ...snapshot.appearance }
+}
+
+export function savePetAppearance(appearance: PetAppearance): void {
+  updatePetState({ appearance: { ...appearance } })
 }
 
 export function getBestLevel(): number {
-  try { return Number(localStorage.getItem('best_level') || '0') } catch { return 0 }
+  return getPetStateSnapshot().bestLevel
 }
 
 export function isPetUnlockedFlag(): boolean {
-  try { return localStorage.getItem('pet_unlocked') === '1' } catch { return false }
+  return getPetStateSnapshot().petUnlocked
 }
 
 export function markPetUnlocked(): void {
-  try { localStorage.setItem('pet_unlocked', '1') } catch {}
+  updatePetState({ petUnlocked: true })
+}
+
+export async function ensurePetStateReady(): Promise<void> {
+  await ensurePetStateLoaded()
 }
