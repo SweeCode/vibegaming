@@ -11,6 +11,7 @@ import { UpgradeManager } from '../systems/UpgradeManager';
 import { ScoreManager } from '../systems/ScoreManager';
 import { Drone } from '../objects/Drone';
 import { loadPetSettings } from '../systems/petSettings';
+import { ensureGuestSessionInitialized, recordCurrentHealth, recordLastWorldVisited, recordSpawnPosition } from '@/lib/guestSession';
 
 export class WaveScene extends Phaser.Scene {
   private player!: Player;
@@ -78,6 +79,7 @@ export class WaveScene extends Phaser.Scene {
     this.gameStartTime = Date.now();
     this.upgradeManager = new UpgradeManager();
     this.scoreManager = new ScoreManager();
+    void ensureGuestSessionInitialized({ lastWorldVisited: 'wave-mode' });
     this.initializePlayerStats();
     this.createPlayer();
     this.createBullets();
@@ -178,6 +180,9 @@ export class WaveScene extends Phaser.Scene {
 
   private createPlayer() {
     this.player = new Player(this, this.scale.width / 2, this.scale.height / 2);
+    recordLastWorldVisited('wave-mode');
+    recordSpawnPosition({ x: this.player.x, y: this.player.y, scene: 'wave-mode' });
+    recordCurrentHealth(this.player.getHealth());
   }
 
   private createBullets() {

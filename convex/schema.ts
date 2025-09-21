@@ -39,6 +39,22 @@ export default defineSchema({
     }),
     updatedAt: v.number()
   }).index('by_user', ['userKey']),
+  guestSessions: defineTable({
+    guestId: v.string(),
+    playerName: v.string(),
+    spawnPosition: v.optional(v.object({
+      x: v.number(),
+      y: v.number(),
+      scene: v.string()
+    })),
+    sprite: v.optional(v.string()),
+    health: v.optional(v.number()),
+    lastWorldVisited: v.optional(v.string()),
+    lastActiveAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    linkedUserId: v.optional(v.string())
+  }).index('by_guest', ['guestId']),
   waveProgress: defineTable({
     deviceId: v.string(),
     waveNumber: v.number(),

@@ -1,6 +1,7 @@
 import * as Phaser from 'phaser';
 import { IS_DEV } from '../config/gameConfig';
 import { fetchTopScoresConvex } from '@/lib/convexClient';
+import { ensureGuestSessionInitialized } from '@/lib/guestSession';
 import { ScoreManager } from '../systems/ScoreManager';
 import { getBestLevel, isPetUnlockedFlag, markPetUnlocked } from '../systems/petSettings';
 
@@ -54,6 +55,7 @@ export class StartMenuScene extends Phaser.Scene {
 
   create() {
     if (IS_DEV) console.log('StartMenuScene created'); // Debug log
+    void ensureGuestSessionInitialized({ lastWorldVisited: 'start-menu' });
     const centerX = this.scale.width / 2;
     const centerY = this.scale.height / 2;
 

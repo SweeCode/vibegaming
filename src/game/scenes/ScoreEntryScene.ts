@@ -1,5 +1,6 @@
 import * as Phaser from 'phaser';
-import { submitScoreConvex } from '@/lib/convexClient';
+import { submitScoreConvex, getStoredPlayerName } from '@/lib/convexClient';
+import { persistGuestPlayerName, recordLastWorldVisited } from '@/lib/guestSession';
 
 export class ScoreEntryScene extends Phaser.Scene {
   private score: number = 0;
@@ -20,10 +21,11 @@ export class ScoreEntryScene extends Phaser.Scene {
     this.score = data.score;
     this.gameTime = data.time;
     this.gameMode = data.gameMode || 'endless';
-    this.currentName = '';
+    this.currentName = getStoredPlayerName() ?? '';
   }
 
   create() {
+    recordLastWorldVisited('score-entry');
     const centerX = this.scale.width / 2;
     const centerY = this.scale.height / 2;
 
@@ -163,15 +165,17 @@ export class ScoreEntryScene extends Phaser.Scene {
   }
 
   private saveScore() {
-    const name = this.currentName.trim() || 'Anonymous';
-    
+    const name = persistGuestPlayerName(this.currentName);
+    this.currentName = name;
+    this.updateNameDisplay();
+
     // Get existing scores for the specific game mode
     const leaderboardKey = this.gameMode === 'wave' ? 'leaderboard_wave' : 'leaderboard';
     const scores = JSON.parse(localStorage.getItem(leaderboardKey) || '[]');
-    
+
     // Add new score entry
     const newEntry = {
-      name: name,
+      name,
       score: this.score,
       time: this.gameTime,
       date: new Date().toISOString()

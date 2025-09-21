@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Guest session scaffolding: local guest identities with Convex-backed `guestSessions` syncing player name, last world visited, spawn position, and health snapshots for future account linking.
 - **Pet System**: Comprehensive pet management and customization system
   - PetScene for managing pet settings and configurations
   - Pet unlock system requiring level 10 achievement
@@ -46,6 +47,7 @@ All notable changes to this project will be documented in this file.
 - Leaderboard positioning: moved below mode switching buttons for full visibility
 
 ### Changed
+- High score flow now reuses/persists the stored player name through the guest session helpers so localStorage and Convex stay aligned.
 - **Pet System Integration**: Enhanced pet functionality throughout the game
   - Pet drone now supports configurable fire rate in constructor
   - Player shield detection method added for pet system integration
