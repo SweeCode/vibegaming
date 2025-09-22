@@ -141,11 +141,12 @@ export function setLevel(kind: PetUpgradeKind, targetLevel: number): { success: 
   return { success: true, newSnacks, newLevel: clampedTarget, deltaCost }
 }
 
+
 export function resetAllWithRefund(): { refunded: number; snacks: number; newLevels: PetUpgrades } {
   const snapshot = getPetStateSnapshot()
   const upgrades = cloneLevels(snapshot.upgrades)
-  let refund: number = 0
-  for (const kind of Object.keys(upgrades) as PetUpgradeKind[]) {
+  let refund = 0
+  for (const kind of Object.keys(upgrades) as (keyof PetUpgrades)[]) {
     const level = upgrades[kind]
     for (let lvl = 0; lvl < level; lvl++) {
       refund += getUpgradeCost(kind, lvl)

@@ -76,15 +76,11 @@ export class PetScene extends Phaser.Scene {
         .text(rightX, centerY - 140, 'Settings', { fontSize: '22px', color: '#aeefff', fontStyle: 'bold' })
         .setOrigin(0, 0.5)
 
-      const minRate = Math.max(200, (mods as unknown as { petFireRateMs?: number }).petFireRateMs ?? current.fireRateMs)
-      const maxDmg = Math.max(1, Math.floor(mods.petDrone?.dps ?? current.damage))
+      // Caps driven by upgrades/modifiers only; saving settings must not change the low/high ends
+      const minRate = Math.max(200, (mods as unknown as { petFireRateMs?: number }).petFireRateMs ?? 200)
+      const maxDmg = Math.max(1, Math.floor(mods.petDrone?.dps ?? 9999))
 
-      const capText = this.add
-        .text(rightX, centerY - 110, `Caps: fire rate ≥ ${minRate}ms, dmg ≤ ${maxDmg}` as string, {
-          fontSize: '14px',
-          color: '#cccccc'
-        })
-        .setOrigin(0, 0.5)
+      // Removed caps text per request
 
       const fireRateLabel = this.add.text(rightX, centerY - 80, 'Fire rate (ms):', labelsStyle).setOrigin(0, 0.5)
       const fireText = this.add.text(centerX + 180, centerY - 80, `${current.fireRateMs}`, valueStyle).setOrigin(0.5)
@@ -140,6 +136,10 @@ export class PetScene extends Phaser.Scene {
         .setOrigin(0.5)
         .setInteractive({ useHandCursor: true })
 
+      // Anchor Save/Back to bottom corners of the panel to avoid overlaps
+      saveBtn.setPosition(panel.x - panel.width / 2 + 80, panel.y + panel.height / 2 - 24)
+      backBtn.setPosition(panel.x + panel.width / 2 - 80, panel.y + panel.height / 2 - 24)
+
       saveBtn.on('pointerdown', () => {
         savePetSettings(current)
         savePetAppearance(app)
@@ -147,8 +147,13 @@ export class PetScene extends Phaser.Scene {
       })
       backBtn.on('pointerdown', () => this.scene.start('StartMenuScene'))
 
-      // Snacks header and counters
-      const snacksText = this.add.text(centerX, centerY - 190, `Snacks: ${getSnacks()}`, { fontSize: '22px', color: '#ffff66', fontStyle: 'bold' }).setOrigin(0.5)
+      // Snacks header and counters (moved to top-left of the panel)
+      const snacksText = this.add.text(
+        panel.x - panel.width / 2 + 16,
+        panel.y - panel.height / 2 + 16,
+        `Snacks: ${getSnacks()}`,
+        { fontSize: '18px', color: '#ffff66', fontStyle: 'bold' }
+      ).setOrigin(0, 0)
 
       // Sleek reset button tucked in top-right of panel
       const resetBtn = this.add.text(panel.x + panel.width / 2 - 60, panel.y - panel.height / 2 + 16, '↺ Reset', {
@@ -180,39 +185,58 @@ export class PetScene extends Phaser.Scene {
         { label: 'Bullet size', kind: 'bulletSizeLevel', y: upgY0 + rowH * 3 }
       ]
 
+      // Keep direct refs for each row to avoid stale name lookups
+      const rowRefs: Record<string, {
+        lvl?: Phaser.GameObjects.Text,
+        cost?: Phaser.GameObjects.Text,
+        dec?: Phaser.GameObjects.Text,
+        inc?: Phaser.GameObjects.Text,
+        buy?: Phaser.GameObjects.Text
+      }> = {}
+
       const refreshUpgradesUI = () => {
         const u = getUpgrades()
         const s = getSelectedLevels()
         snacksText.setText(`Snacks: ${getSnacks()}`)
         for (const r of rows) {
-          const lvlText = this.children.getByName(`lvl_${r.kind}`) as Phaser.GameObjects.Text | null
-          const costText = this.children.getByName(`cost_${r.kind}`) as Phaser.GameObjects.Text | null
-          const dec = this.children.getByName(`dec_${r.kind}`) as Phaser.GameObjects.Text | null
-          const inc = this.children.getByName(`inc_${r.kind}`) as Phaser.GameObjects.Text | null
+          const refs = rowRefs[r.kind] || {}
+          const lvlText = refs.lvl
+          const costText = refs.cost
+          const dec = refs.dec
+          const inc = refs.inc
+          const buy = refs.buy
           const level = u[r.kind]
+          const sel = s[r.kind]
           const max = getMaxLevel(r.kind)
           const atMax = level >= max
           const cost = getUpgradeCost(r.kind, level)
-          lvlText?.setText(`Lv ${level}/${max}`)
+          // Show selected/max (e.g., 1/8). Selected is capped by purchased elsewhere.
+          lvlText?.setText(`Lv ${sel}/${max}`)
           costText?.setText(atMax ? 'MAX' : `Next: ${cost}`)
-          const sel = s[r.kind]
-          if (dec) {
-            const canSelDec = sel > 0
-            dec.setAlpha(canSelDec ? 1 : 0.4)
-            if (canSelDec) {
-              dec.setInteractive({ useHandCursor: true })
+          // Update buy button label and interactivity
+          if (buy) {
+            const canAfford = getSnacks() >= cost
+            if (atMax) {
+              buy.setText('MAX').setAlpha(0.6).disableInteractive()
             } else {
-              dec.disableInteractive()
+              buy.setText(`UPGRADE (${cost})`).setAlpha(canAfford ? 1 : 0.6)
+              if (canAfford) {
+                buy.setInteractive({ useHandCursor: true })
+              } else {
+                buy.disableInteractive()
+              }
             }
           }
+          // +/- operate on selected levels: 0..purchased
+          if (dec) {
+            const canDec = sel > 0
+            dec.setAlpha(canDec ? 1 : 0.4)
+            if (canDec) dec.setInteractive({ useHandCursor: true }); else dec.disableInteractive()
+          }
           if (inc) {
-            const canSelInc = sel < level
-            inc.setAlpha(canSelInc ? 1 : 0.4)
-            if (canSelInc) {
-              inc.setInteractive({ useHandCursor: true })
-            } else {
-              inc.disableInteractive()
-            }
+            const canInc = sel < level
+            inc.setAlpha(canInc ? 1 : 0.4)
+            if (canInc) inc.setInteractive({ useHandCursor: true }); else inc.disableInteractive()
           }
         }
       }
@@ -228,21 +252,22 @@ export class PetScene extends Phaser.Scene {
         const dec = this.add.text(leftUpgX + 500 - 30, r.y, '−', { fontSize: '20px', color: '#ffffff', backgroundColor: '#333333', padding: { x: 8, y: 2 } }).setOrigin(0.5)
         dec.setName(`dec_${r.kind}`)
         dec.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-          // Tuning only: adjust selected level down (cannot go below 0)
-          const s = getSelectedLevels()
-          const res = setSelectedLevel(r.kind, s[r.kind] - 1)
+          // Lower selected level (cannot go below 0)
+          const sNow = getSelectedLevels()
+          const res = setSelectedLevel(r.kind, sNow[r.kind] - 1)
           if (res.success) { refreshUpgradesUI() }
         })
         const inc = this.add.text(leftUpgX + 500 + 30, r.y, '+', { fontSize: '20px', color: '#ffffff', backgroundColor: '#004400', padding: { x: 8, y: 2 } }).setOrigin(0.5)
         inc.setName(`inc_${r.kind}`)
         inc.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-          // Tuning only: adjust selected level up (bounded by purchased)
-          const s = getSelectedLevels()
-          const res = setSelectedLevel(r.kind, s[r.kind] + 1)
+          // Raise selected level (bounded by purchased)
+          const sNow = getSelectedLevels()
+          const res = setSelectedLevel(r.kind, sNow[r.kind] + 1)
           if (res.success) { refreshUpgradesUI() }
         })
         // Upgrade (apply) button (placed where the old selected slider was)
         const buyBtn = this.add.text(leftUpgX + 620, r.y, 'UPGRADE', { fontSize: '14px', color: '#ffffff', backgroundColor: '#005599', padding: { x: 10, y: 6 } }).setOrigin(0.5)
+          .setName(`buy_${r.kind}`)
           .setInteractive({ useHandCursor: true })
           .on('pointerdown', () => {
             const u = getUpgrades()
@@ -252,8 +277,15 @@ export class PetScene extends Phaser.Scene {
             const cost = getUpgradeCost(r.kind, level)
             if (getSnacks() < cost) { this.cameras.main.shake(80, 0.003); return }
             const res = setLevel(r.kind, level + 1)
-            if (res.success) { this.cameras.main.flash(100, 180, 255, 200); refreshUpgradesUI() }
+            if (res.success) {
+              // Auto-sync selected to new purchased so label flips 0/8 -> 1/8 immediately
+              setSelectedLevel(r.kind, res.newLevel)
+              this.cameras.main.flash(100, 180, 255, 200)
+              refreshUpgradesUI()
+            }
           })
+        // Track refs
+        rowRefs[r.kind] = { lvl: lvlText, cost: costText, dec, inc, buy: buyBtn }
         upgElements.push(label, lvlText, costText, dec, inc, buyBtn)
       }
 
@@ -300,11 +332,12 @@ export class PetScene extends Phaser.Scene {
       }
       drawPreview()
 
-      // Color presets (centered)
+      // Color presets (spaced out)
       const colors = [0x66ccff, 0xff6666, 0x66ff99, 0xffdd66, 0xbb88ff]
+      const colorLabel = this.add.text(centerX - 140, centerY + 30, 'Color:', { fontSize: '14px', color: '#cccccc' }).setOrigin(0, 0.5)
       const colorBoxes: Phaser.GameObjects.Rectangle[] = []
       colors.forEach((c, i) => {
-        const box = this.add.rectangle(centerX - 70 + i * 35, centerY + 30, 24, 24, c).setOrigin(0.5).setStrokeStyle(1, 0xffffff, 0.6)
+        const box = this.add.rectangle(centerX - 84 + i * 42, centerY + 36, 24, 24, c).setOrigin(0.5).setStrokeStyle(1, 0xffffff, 0.6)
         box.setInteractive({ useHandCursor: true }).on('pointerdown', () => { app.bodyColor = c; drawPreview() })
         colorBoxes.push(box)
       })
@@ -331,7 +364,6 @@ export class PetScene extends Phaser.Scene {
         unlockText,
         futureText,
         settingsHeader,
-        capText,
         fireRateLabel,
         fireText,
         fireDec,
@@ -350,6 +382,7 @@ export class PetScene extends Phaser.Scene {
         appHeader,
         this.previewBody!,
         this.previewEyes!,
+        colorLabel,
         ...colorBoxes,
         shapeText,
         ...shapeButtons,
