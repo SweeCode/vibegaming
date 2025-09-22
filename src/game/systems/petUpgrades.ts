@@ -145,14 +145,12 @@ export function resetAllWithRefund(): { refunded: number; snacks: number; newLev
   const snapshot = getPetStateSnapshot()
   const upgrades = cloneLevels(snapshot.upgrades)
   let refund = 0
-  for (const key of Object.keys(upgrades)) {
-    const kind = key as keyof typeof upgrades
-    const levelValue = upgrades[kind]
-    const level = typeof levelValue === 'number' ? levelValue : 0
+  for (const kind of Object.keys(upgrades) as (keyof PetUpgrades)[]) {
+    const level = upgrades[kind]
     for (let lvl = 0; lvl < level; lvl++) {
-      refund += getUpgradeCost(kind as PetUpgradeKind, lvl)
+      refund += getUpgradeCost(kind, lvl)
     }
-    upgrades[kind] = 0 as never
+    upgrades[kind] = 0
   }
   const selected = ensureSelectedWithinPurchased(DEFAULT_UPGRADES, upgrades)
   const newSnacks = snapshot.snacks + refund
