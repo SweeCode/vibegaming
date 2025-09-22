@@ -1,6 +1,6 @@
 import * as Phaser from 'phaser';
 import { IS_DEV } from '../config/gameConfig';
-import { fetchTopScoresConvex } from '@/lib/convexClient';
+import { fetchTopScoresConvex, resetLeaderboardConvex } from '@/lib/convexClient';
 import { ensureGuestSessionInitialized } from '@/lib/guestSession';
 import { ScoreManager } from '../systems/ScoreManager';
 import { getBestLevel, isPetUnlockedFlag, markPetUnlocked } from '../systems/petSettings';
@@ -33,6 +33,7 @@ export class StartMenuScene extends Phaser.Scene {
   private petOverlay?: Phaser.GameObjects.Container;
   private petButtonState: 'loading' | 'locked' | 'unlocked' = 'loading';
   private petRequirementTip?: Phaser.GameObjects.Text;
+  private leaderboardResetInProgress = false;
   // Background FX
   private bgStarsFar?: Phaser.GameObjects.Group;
   private bgStarsNear?: Phaser.GameObjects.Group;
@@ -608,27 +609,47 @@ export class StartMenuScene extends Phaser.Scene {
     // Reset leaderboard with Ctrl+Shift+R
     this.input.keyboard?.on('keydown', (event: KeyboardEvent) => {
       if (event.ctrlKey && event.shiftKey && event.key === 'R') {
-        this.resetLeaderboard();
+        void this.resetLeaderboard();
       }
     });
   }
 
-  private resetLeaderboard() {
-    // Clear leaderboard data for both modes
-    localStorage.removeItem('leaderboard');
-    localStorage.removeItem('leaderboard_wave');
+  private async resetLeaderboard() {
+    if (this.leaderboardResetInProgress) return;
+    this.leaderboardResetInProgress = true;
 
-    // Show confirmation message
-    const confirmText = this.add.text(this.scale.width / 2, this.scale.height - 100, 'Leaderboards Reset!', {
+    const statusText = this.add.text(this.scale.width / 2, this.scale.height - 100, 'Resetting leaderboards...', {
       fontSize: '32px',
-      color: '#ff0000',
+      color: '#ffff66',
       fontStyle: 'bold'
     }).setOrigin(0.5);
 
-    // Remove message after 2 seconds
+    const success = await resetLeaderboardConvex();
+
+    if (success) {
+      try {
+        localStorage.removeItem('leaderboard');
+        localStorage.removeItem('leaderboard_wave');
+      } catch (error) {
+        if (IS_DEV) console.warn('Failed clearing cached leaderboards:', error);
+      }
+
+      statusText.setText('Leaderboards Reset!');
+      statusText.setColor('#00ffaa');
+
+      if (this.showingLeaderboard) {
+        await this.showSpecificLeaderboard(this.currentLeaderboardMode);
+      }
+    } else {
+      statusText.setText('Failed to reset leaderboard');
+      statusText.setColor('#ff6666');
+    }
+
     this.time.delayedCall(2000, () => {
-      confirmText.destroy();
+      statusText.destroy();
     });
+
+    this.leaderboardResetInProgress = false;
   }
 
   private setupAudioUnlock() {
