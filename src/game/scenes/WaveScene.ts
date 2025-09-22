@@ -4,6 +4,7 @@ import { GAME_SETTINGS } from '../config/gameConfig';
 import { Player } from '../objects/Player';
 import { Enemy, EnemySpawner, MiniEnemy, Boss, SentinelBoss, ArtilleryBoss } from '../objects/Enemy';
 import { addSnacks, getSnacks } from '../systems/petUpgrades';
+import { getBulletSpeedMultiplier, getBulletSizeMultiplier } from '../systems/petUpgrades';
 import { GameUI } from '../ui/GameUI';
 import { ReloadingBar } from '../ui/ReloadingBar';
 import { WaveManager } from '../systems/WaveManager';
@@ -13,6 +14,7 @@ import { Drone } from '../objects/Drone';
 import { loadPetSettings } from '../systems/petSettings';
 import { ensureGuestSessionInitialized, recordCurrentHealth, recordLastWorldVisited, recordSpawnPosition } from '@/lib/guestSession';
 import { getPlayerColor } from '../systems/playerAppearance';
+import { ArenaBackground, ArenaTheme } from '../objects/ArenaBackground';
 
 export class WaveScene extends Phaser.Scene {
   private player!: Player;
@@ -52,6 +54,7 @@ export class WaveScene extends Phaser.Scene {
   private bossIntroTimers: Phaser.Time.TimerEvent[] = [];
   private bossPreviewFlash?: Phaser.GameObjects.Graphics;
   private drone?: Drone;
+  private arenaBackground?: ArenaBackground;
 
   constructor() {
     super({ key: 'WaveScene' });
@@ -70,6 +73,7 @@ export class WaveScene extends Phaser.Scene {
     this.cleanupBoss();
     this.cleanupBossIntro();
     if (this.drone) { this.drone.destroy(); this.drone = undefined; }
+    if (this.arenaBackground) { this.arenaBackground.destroy(); this.arenaBackground = undefined; }
   }
 
   preload() {
@@ -82,6 +86,7 @@ export class WaveScene extends Phaser.Scene {
     this.scoreManager = new ScoreManager();
     void ensureGuestSessionInitialized({ lastWorldVisited: 'wave-mode' });
     this.initializePlayerStats();
+    this.createArenaBackground();
     this.createPlayer();
     this.createBullets();
     this.createEnemies();
@@ -100,7 +105,23 @@ export class WaveScene extends Phaser.Scene {
     this.ammo = this.maxAmmo;
   }
 
-  update() {
+  private createArenaBackground() {
+    this.arenaBackground?.destroy();
+    this.arenaBackground = new ArenaBackground(this);
+    this.setDefaultArenaTheme();
+  }
+
+  private setDefaultArenaTheme() {
+    this.arenaBackground?.setTheme('space');
+  }
+
+  private setArenaThemeForBoss(type: 'sentinel' | 'artillery') {
+    const nextTheme: ArenaTheme = type === 'artillery' ? 'prison' : 'hell';
+    this.arenaBackground?.setTheme(nextTheme);
+  }
+
+  update(_: number, delta: number) {
+    if (this.arenaBackground) this.arenaBackground.update(delta);
     if (this.gameOver) return;
 
     this.updateBullets();
@@ -256,9 +277,11 @@ export class WaveScene extends Phaser.Scene {
     this.waveStartTime = Date.now();
     const settings = this.waveManager.getCurrentWaveSettings();
     if (settings.isBoss) {
+      this.setArenaThemeForBoss(settings.bossType || 'sentinel');
       // On all boss waves, show the boss intro instead of the normal wave notification
       this.startBossIntro(settings.bossType || 'sentinel');
     } else {
+      this.setDefaultArenaTheme();
       this.showWaveNotification();
       this.setupSpawnTimer();
     }
@@ -267,7 +290,7 @@ export class WaveScene extends Phaser.Scene {
     if (mods.petDrone?.enabled) {
       const settings = loadPetSettings(mods);
       this.drone?.destroy();
-      this.drone = new Drone(this, this.player, (x: number, y: number) => this.fireDroneBullet(x, y, settings.damage));
+      this.drone = new Drone(this, this.player, (x: number, y: number) => this.fireDroneBullet(x, y, settings.damage), settings.fireRateMs);
     }
   }
 
@@ -337,9 +360,11 @@ export class WaveScene extends Phaser.Scene {
     if (IS_DEV) console.log(`Now on wave ${this.waveManager.getCurrentWave()}`);
     const settings = this.waveManager.getCurrentWaveSettings();
     if (settings.isBoss) {
+      this.setArenaThemeForBoss(settings.bossType || 'sentinel');
       // On all boss waves, show the boss intro instead of the normal wave notification
       this.startBossIntro(settings.bossType || 'sentinel');
     } else {
+      this.setDefaultArenaTheme();
       this.showWaveNotification();
       this.setupSpawnTimer();
     }
@@ -350,6 +375,7 @@ export class WaveScene extends Phaser.Scene {
     if (this.bossIntroActive) return;
     this.bossIntroActive = true;
     this.cleanupBossIntro();
+    this.setArenaThemeForBoss(type);
 
     // Compose message
     const waveNum = this.waveManager.getCurrentWave();
@@ -519,6 +545,7 @@ export class WaveScene extends Phaser.Scene {
     this.bossHitCooldownUntil = 0;
     // Ensure any existing boss is fully cleaned before spawning a new one
     this.cleanupBoss();
+    this.setArenaThemeForBoss(type);
     
     // Clean up the preview flash before spawning the actual boss
     if (this.bossPreviewFlash) {
@@ -694,6 +721,7 @@ export class WaveScene extends Phaser.Scene {
       (this.boss as Boss).destroy();
     }
     this.boss = undefined;
+    this.setDefaultArenaTheme();
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1036,7 +1064,8 @@ export class WaveScene extends Phaser.Scene {
       asObj.setData('fromDrone', true)
     }
     if (bullet.body) {
-      bullet.body.velocity.set(dirX * 350, dirY * 350);
+      const speedMult = Math.max(0.5, getBulletSpeedMultiplier());
+      bullet.body.velocity.set(dirX * 350 * speedMult, dirY * 350 * speedMult);
     }
     bullet.ttlEvent?.remove(false);
     bullet.ttlEvent = this.time.delayedCall(2000, () => {
@@ -1049,6 +1078,9 @@ export class WaveScene extends Phaser.Scene {
     if (typeof asObj2.setData === 'function') {
       asObj2.setData('droneDamage', damage)
     }
+    // Apply size multiplier visually
+    const sizeMult = Math.max(0.5, getBulletSizeMultiplier());
+    bullet.setScale(sizeMult);
   }
 
   private getNearestEnemy(x: number, y: number): Phaser.GameObjects.GameObject | null {
