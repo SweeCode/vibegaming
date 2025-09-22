@@ -10,6 +10,7 @@ import { Drone } from '../objects/Drone';
 import { loadPetSettings } from '../systems/petSettings';
 import { getBulletSpeedMultiplier, getBulletSizeMultiplier, getSnacks } from '../systems/petUpgrades';
 import { getPlayerColor } from '../systems/playerAppearance';
+import { ArenaBackground } from '../objects/ArenaBackground';
 
 export class MainScene extends Phaser.Scene {
   private player!: Player;
@@ -21,6 +22,7 @@ export class MainScene extends Phaser.Scene {
   private difficultyManager!: DifficultyManager;
   private upgradeManager!: UpgradeManager;
   private drone?: Drone;
+  private arenaBackground?: ArenaBackground;
   private score = 0;
   private ammo = GAME_SETTINGS.weapons.bullet.maxAmmo;
   private maxAmmo = GAME_SETTINGS.weapons.bullet.maxAmmo;
@@ -39,6 +41,7 @@ export class MainScene extends Phaser.Scene {
       this.spawnTimer.destroy();
     }
     if (this.drone) { this.drone.destroy(); this.drone = undefined; }
+    if (this.arenaBackground) { this.arenaBackground.destroy(); this.arenaBackground = undefined; }
   }
 
   preload() {
@@ -49,11 +52,13 @@ export class MainScene extends Phaser.Scene {
     this.gameStartTime = Date.now(); // Start the timer
     this.upgradeManager = new UpgradeManager();
     this.initializePlayerStats();
+    this.createArenaBackground();
     this.createPlayer();
     this.createInputs();
     this.createBullets();
-     this.createEnemies();
-     this.createEnemyBullets();    this.createUI();
+    this.createEnemies();
+    this.createEnemyBullets();
+    this.createUI();
     this.createReloadingBar();
     this.createDifficultyManager();
     this.setupCollisions();
@@ -66,7 +71,7 @@ export class MainScene extends Phaser.Scene {
     if (mods.petDrone?.enabled) {
       const settings = loadPetSettings(mods);
       this.drone?.destroy();
-      this.drone = new Drone(this, this.player, (x: number, y: number) => this.fireDroneBullet(x, y, settings.damage));
+      this.drone = new Drone(this, this.player, (x: number, y: number) => this.fireDroneBullet(x, y, settings.damage), settings.fireRateMs);
     }
   }
 
@@ -76,9 +81,15 @@ export class MainScene extends Phaser.Scene {
     this.ammo = this.maxAmmo;
   }
 
-  update() {
-    if (this.gameOver) return;
+  private createArenaBackground() {
+    this.arenaBackground?.destroy();
+    this.arenaBackground = new ArenaBackground(this);
+    this.arenaBackground.setTheme('space');
+  }
 
+  update(_: number, delta: number) {
+    if (this.arenaBackground) this.arenaBackground.update(delta);
+    if (this.gameOver) return;
     this.updateBullets();
     this.updateEnemies(); // Add enemy cleanup
     if (this.drone) this.drone.update(this.time.now);
