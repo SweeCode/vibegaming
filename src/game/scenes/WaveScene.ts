@@ -382,7 +382,6 @@ export class WaveScene extends Phaser.Scene {
     const centerX = this.scale.width / 2;
     const centerY = this.scale.height / 2;
     const bossName = type === 'artillery' ? 'ARTILLERY' : 'SENTINEL';
-    const isCompleted = this.scoreManager.isWaveCompleted(waveNum);
     const message = `WARNING: ${bossName} BOSS INCOMING`;
 
     // Create initial boss preview flash
@@ -410,15 +409,6 @@ export class WaveScene extends Phaser.Scene {
         if (Math.random() < 0.12) this.cameras.main.shake(80, 0.003);
         if (idx >= message.length) {
           typeTimer.remove(false);
-          // Add completion status if already completed
-          if (isCompleted) {
-            const statusText = this.add.text(centerX, centerY + 20, 'ALREADY COMPLETED', {
-              fontSize: '24px',
-              color: '#ff6666',
-              fontStyle: 'bold'
-            }).setOrigin(0.5);
-            this.bossIntroTimers.push(this.time.delayedCall(2000, () => statusText.destroy()));
-          }
           // Start countdown after brief pause
           const delay = this.time.delayedCall(350, () => this.runBossCountdown(type), undefined, this);
           this.bossIntroTimers.push(delay);
@@ -745,7 +735,7 @@ export class WaveScene extends Phaser.Scene {
 
     this.waveText = this.add.text(centerX, centerY - 50, `WAVE ${waveSettings.waveNumber}`, {
       fontSize: '48px',
-      color: isCompleted ? '#888888' : '#ffff00',
+      color: '#ffd700',
       fontStyle: 'bold'
     }).setOrigin(0.5);
 
@@ -755,19 +745,8 @@ export class WaveScene extends Phaser.Scene {
       fontStyle: 'bold'
     }).setOrigin(0.5);
 
-    // Add completion status text
-    let statusText: Phaser.GameObjects.Text | undefined;
-    if (isCompleted) {
-      statusText = this.add.text(centerX, centerY + 50, 'ALREADY COMPLETED', {
-        fontSize: '20px',
-        color: '#ff6666',
-        fontStyle: 'bold'
-      }).setOrigin(0.5);
-    }
-
     // Animate notification
     const targets = [this.waveText, titleText];
-    if (statusText) targets.push(statusText);
     
     this.tweens.add({
       targets,
@@ -787,7 +766,6 @@ export class WaveScene extends Phaser.Scene {
         onComplete: () => {
           this.waveText?.destroy();
           titleText.destroy();
-          statusText?.destroy();
         }
       });
     });

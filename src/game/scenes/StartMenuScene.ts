@@ -624,24 +624,15 @@ export class StartMenuScene extends Phaser.Scene {
       fontStyle: 'bold'
     }).setOrigin(0.5);
 
-    const success = await resetLeaderboardConvex();
+    const remoteSuccess = await resetLeaderboardConvex();
 
-    if (success) {
-      try {
-        localStorage.removeItem('leaderboard');
-        localStorage.removeItem('leaderboard_wave');
-      } catch (error) {
-        if (IS_DEV) console.warn('Failed clearing cached leaderboards:', error);
-      }
-
-      statusText.setText('Leaderboards Reset!');
+    if (remoteSuccess) {
+      await this.resetLeaderboardLocalOnly();
+      statusText.setText('Your entries reset!');
       statusText.setColor('#00ffaa');
-
-      if (this.showingLeaderboard) {
-        await this.showSpecificLeaderboard(this.currentLeaderboardMode);
-      }
     } else {
-      statusText.setText('Failed to reset leaderboard');
+      await this.resetLeaderboardLocalOnly();
+      statusText.setText('Remote reset failed (cache cleared only)');
       statusText.setColor('#ff6666');
     }
 
@@ -650,6 +641,20 @@ export class StartMenuScene extends Phaser.Scene {
     });
 
     this.leaderboardResetInProgress = false;
+  }
+
+  private async resetLeaderboardLocalOnly() {
+    // Clear cached leaderboard data so the UI reflects the server state
+    try {
+      localStorage.removeItem('leaderboard');
+      localStorage.removeItem('leaderboard_wave');
+    } catch (error) {
+      if (IS_DEV) console.warn('Failed clearing cached leaderboards:', error);
+    }
+
+    if (this.showingLeaderboard) {
+      await this.showSpecificLeaderboard(this.currentLeaderboardMode);
+    }
   }
 
   private setupAudioUnlock() {
