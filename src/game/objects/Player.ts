@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { UpgradeManager } from '../systems/UpgradeManager';
+import { UpgradeManager, type PlayerStats } from '../systems/UpgradeManager';
 import type { ActiveModifiers } from '../systems/SkillTreeManager';
 import { getPlayerColor } from '../systems/playerAppearance';
 
@@ -14,7 +14,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private shieldHp: number = 0;
   private regenAccumulatorMs: number = 0;
 
-  constructor(scene: Phaser.Scene, x: number, y: number) {
+  constructor(scene: Phaser.Scene, x: number, y: number, overrides?: { forcedStats?: Partial<PlayerStats> }) {
     super(scene, x, y, 'player');
     
     scene.add.existing(this);
@@ -25,6 +25,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Initialize upgrade system and get current stats
     this.upgradeManager = new UpgradeManager();
     this.playerStats = this.upgradeManager.getPlayerStats();
+    if (overrides?.forcedStats) {
+      this.playerStats = { ...this.playerStats, ...overrides.forcedStats } as PlayerStats;
+    }
     this.modifiers = this.upgradeManager.getModifiers();
     
     this.health = this.playerStats.health;

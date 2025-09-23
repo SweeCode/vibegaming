@@ -24,6 +24,7 @@ export class StartMenuScene extends Phaser.Scene {
   private waveButton?: Phaser.GameObjects.Text;
   private bossTestButton?: Phaser.GameObjects.Text;
   private modesBackButton?: Phaser.GameObjects.Text;
+  private challengeButton?: Phaser.GameObjects.Text;
   private waveProgressButton?: Phaser.GameObjects.Text;
   private waveProgressDisplay?: Phaser.GameObjects.Text;
   private showingLeaderboard = false;
@@ -145,6 +146,25 @@ export class StartMenuScene extends Phaser.Scene {
 
     // Ensure WebAudio context resumes only after a user gesture to avoid browser warnings
     this.setupAudioUnlock();
+
+    // If we are on /challenge/play, auto-start with level param
+    try {
+      const url = new URL(window.location.href);
+      if (url.pathname.startsWith('/challenge/play')) {
+        const level = (url.searchParams.get('level') || 'boss_rush') as 'boss_rush' | 'split_attention' | 'no_shots' | 'glass_cannon' | 'speed_demon';
+        if (level === 'boss_rush') {
+          this.scene.start('WaveScene', { bossOnly: true, challengeBossRush: true, disablePet: true, forcedStats: { health: 100, speed: 200, maxAmmo: 10, reloadSpeed: 2000, bulletSpeed: 400, bulletDamage: 1 }, challengeMode: true, challengeId: 'boss_rush' });
+        } else if (level === 'split_attention') {
+          this.scene.start('WaveScene', { bossOnly: true, challengeBossRush: false, disablePet: true, forcedStats: { health: 100, speed: 200, maxAmmo: 10, reloadSpeed: 2000, bulletSpeed: 400, bulletDamage: 1 }, challengeMode: true, challengeId: 'split_attention' });
+        } else if (level === 'no_shots') {
+          this.scene.start('ChallengeScene', { level });
+        } else if (level === 'glass_cannon') {
+          this.scene.start('WaveScene', { bossOnly: true, challengeBossRush: true, disablePet: true, forcedStats: { health: 1, speed: 200, maxAmmo: 10, reloadSpeed: 2000, bulletSpeed: 400, bulletDamage: 1 }, challengeMode: true, challengeId: 'glass_cannon' });
+        } else if (level === 'speed_demon') {
+          this.scene.start('WaveScene', { bossOnly: true, challengeBossRush: false, disablePet: true, forcedStats: { health: 100, speed: 400, maxAmmo: 10, reloadSpeed: 2000, bulletSpeed: 400, bulletDamage: 1 }, challengeMode: true, challengeId: 'speed_demon' });
+        }
+      }
+    } catch {}
   }
 
   private createShooterBackground() {
@@ -724,6 +744,20 @@ export class StartMenuScene extends Phaser.Scene {
       .on('pointerover', () => this.waveButton?.setStyle({ backgroundColor: '#660066' }))
       .on('pointerout', () => this.waveButton?.setStyle({ backgroundColor: '#440044' }));
 
+    this.challengeButton = this.add.text(centerX, centerY - 60, 'CHALLENGE', {
+      fontSize: '28px',
+      color: '#00ffff',
+      backgroundColor: '#003344',
+      padding: { x: 20, y: 10 }
+    }).setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        // Navigate to Next.js route
+        try { window.location.href = '/challenge'; } catch { /* noop */ }
+      })
+      .on('pointerover', () => this.challengeButton?.setStyle({ backgroundColor: '#004455' }))
+      .on('pointerout', () => this.challengeButton?.setStyle({ backgroundColor: '#003344' }));
+
     this.bossTestButton = this.add.text(centerX - 100, centerY + 20, 'BOSS TEST', {
       fontSize: '20px',
       color: '#ff6666',
@@ -772,6 +806,7 @@ export class StartMenuScene extends Phaser.Scene {
 
     if (this.classicButton) { this.classicButton.destroy(); this.classicButton = undefined; }
     if (this.waveButton) { this.waveButton.destroy(); this.waveButton = undefined; }
+    if (this.challengeButton) { this.challengeButton.destroy(); this.challengeButton = undefined; }
     if (this.bossTestButton) { this.bossTestButton.destroy(); this.bossTestButton = undefined; }
     if (this.modesBackButton) { this.modesBackButton.destroy(); this.modesBackButton = undefined; }
     if (this.waveProgressButton) { this.waveProgressButton.destroy(); this.waveProgressButton = undefined; }

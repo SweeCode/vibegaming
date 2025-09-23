@@ -93,9 +93,17 @@ export class PauseMenuScene extends Phaser.Scene {
   }
 
   private quitToMenu() {
-    // Stop parent scene and go to start menu
-    this.scene.stop(this.parentScene);
+    // Stop parent scene and go to appropriate menu
+    const parent = this.parentScene;
+    this.scene.stop(parent);
     this.scene.stop();
+    const isChallengeUrl = (() => {
+      try { return typeof window !== 'undefined' && window.location.pathname.startsWith('/challenge'); } catch { return false; }
+    })();
+    if (parent === 'ChallengeScene' || isChallengeUrl) {
+      try { window.location.href = '/challenge'; } catch { this.scene.start('StartMenuScene'); }
+      return;
+    }
     this.scene.start('StartMenuScene');
   }
 
