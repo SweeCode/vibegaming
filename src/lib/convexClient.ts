@@ -262,3 +262,31 @@ export async function deleteSkillBuildSlotConvex(slot: number): Promise<boolean>
     return false
   }
 }
+
+// Achievements
+export type AchievementRecord = { deviceId: string; achievementId: string; title: string; unlockedAt: number }
+
+export async function listAchievementsConvex(): Promise<AchievementRecord[] | null> {
+  const convex = getConvexClient()
+  if (!convex) return null
+  try {
+    const result = await (convex as unknown as { query: (name: string, args: unknown) => Promise<unknown> }).query(
+      'achievements:listAchievements',
+      { deviceId: getGuestId() }
+    )
+    return Array.isArray(result) ? (result as AchievementRecord[]) : null
+  } catch {
+    return null
+  }
+}
+
+export async function grantAchievementConvex(achievementId: string, title: string, unlockedAt: number): Promise<void> {
+  const convex = getConvexClient()
+  if (!convex) return
+  try {
+    await (convex as unknown as { mutation: (name: string, args: unknown) => Promise<unknown> }).mutation(
+      'achievements:grantAchievement',
+      { deviceId: getGuestId(), achievementId, title, unlockedAt }
+    )
+  } catch {}
+}

@@ -8,7 +8,7 @@ import { getBulletSpeedMultiplier, getBulletSizeMultiplier } from '../systems/pe
 import { GameUI } from '../ui/GameUI';
 import { ReloadingBar } from '../ui/ReloadingBar';
 import { WaveManager } from '../systems/WaveManager';
-import { UpgradeManager } from '../systems/UpgradeManager';
+import { UpgradeManager, type PlayerStats } from '../systems/UpgradeManager';
 import { ScoreManager } from '../systems/ScoreManager';
 import { Drone } from '../objects/Drone';
 import { loadPetSettings } from '../systems/petSettings';
@@ -111,11 +111,14 @@ export class WaveScene extends Phaser.Scene {
   private upgradeManager!: UpgradeManager;
   private scoreManager!: ScoreManager;
   private boss?: Boss;
+  private boss2?: Boss; // optional second boss for challenge boss rush
   private bossHealthBar?: Phaser.GameObjects.Graphics;
   private bossHealthText?: Phaser.GameObjects.Text;
   private bossAddTimer?: Phaser.Time.TimerEvent;
   private bossBulletOverlap?: Phaser.Physics.Arcade.Collider;
+  private bossBulletOverlap2?: Phaser.Physics.Arcade.Collider;
   private bossPlayerCollider?: Phaser.Physics.Arcade.Collider;
+  private bossPlayerCollider2?: Phaser.Physics.Arcade.Collider;
   private bossPillars: BossPillar[] = [];
   private pillarPlayerCollider?: Phaser.Physics.Arcade.Collider;
   private pillarBulletCollider?: Phaser.Physics.Arcade.Collider;
@@ -143,13 +146,22 @@ export class WaveScene extends Phaser.Scene {
   private drone?: Drone;
   private arenaBackground?: ArenaBackground;
   private bossOnlyMode = false;
+  private challengeBossRush = false; // spawn both bosses at once
+  private challengeDisablePet = false;
+  private forcedStats?: Partial<PlayerStats>;
 
   constructor() {
     super({ key: 'WaveScene' });
   }
 
-  init(data?: { bossOnly?: boolean }) {
+  init(data?: { bossOnly?: boolean, challengeBossRush?: boolean, disablePet?: boolean, forcedStats?: Partial<PlayerStats>, challengeMode?: boolean, challengeId?: 'boss_rush' | 'split_attention' | 'glass_cannon' | 'speed_demon' }) {
     this.bossOnlyMode = !!data?.bossOnly;
+    this.challengeBossRush = !!data?.challengeBossRush;
+    this.challengeDisablePet = !!data?.disablePet;
+    this.forcedStats = data?.forcedStats;
+    // store challenge metadata on scene for completion message
+    (this as unknown as { _challengeMode?: boolean })._challengeMode = !!data?.challengeMode;
+    (this as unknown as { _challengeId?: string })._challengeId = data?.challengeId;
   }
 
   shutdown() {
@@ -224,6 +236,9 @@ export class WaveScene extends Phaser.Scene {
       // Ensure boss AI/movement runs
       (this.boss as Boss).update();
     }
+    if (this.boss2 && this.boss2.active) {
+      (this.boss2 as Boss).update();
+    }
     if (this.player) this.player.update();
     if (this.reloadingBar) this.reloadingBar.update();
     // UI indicators
@@ -294,7 +309,7 @@ export class WaveScene extends Phaser.Scene {
   }
 
   private createPlayer() {
-    this.player = new Player(this, this.scale.width / 2, this.scale.height / 2);
+    this.player = new Player(this, this.scale.width / 2, this.scale.height / 2, { forcedStats: this.forcedStats });
     recordLastWorldVisited('wave-mode');
     recordSpawnPosition({ x: this.player.x, y: this.player.y, scene: 'wave-mode' });
     recordCurrentHealth(this.player.getHealth());
@@ -551,9 +566,14 @@ export class WaveScene extends Phaser.Scene {
     this.waveStartTime = Date.now();
     const settings = this.waveManager.getCurrentWaveSettings();
     if (settings.isBoss) {
-      this.setArenaThemeForBoss(settings.bossType || 'sentinel');
-      // On all boss waves, show the boss intro instead of the normal wave notification
-      this.startBossIntro(settings.bossType || 'sentinel');
+      if (this.challengeBossRush) {
+        // Custom challenge intro instead of standard boss intro
+        this.setArenaThemeForBoss('sentinel');
+        this.startChallengeBossRushIntro();
+      } else {
+        this.setArenaThemeForBoss(settings.bossType || 'sentinel');
+        this.startBossIntro(settings.bossType || 'sentinel');
+      }
     } else {
       this.setDefaultArenaTheme();
       this.showWaveNotification();
@@ -561,7 +581,7 @@ export class WaveScene extends Phaser.Scene {
     }
     // Spawn pet drone if skill is enabled
     const mods = this.upgradeManager.getModifiers();
-    if (mods.petDrone?.enabled) {
+    if (!this.challengeDisablePet && mods.petDrone?.enabled) {
       const settings = loadPetSettings(mods);
       this.drone?.destroy();
       this.drone = new Drone(this, this.player, (x: number, y: number) => this.fireDroneBullet(x, y, settings.damage), settings.fireRateMs);
@@ -634,9 +654,13 @@ export class WaveScene extends Phaser.Scene {
     if (IS_DEV) console.log(`Now on wave ${this.waveManager.getCurrentWave()}`);
     const settings = this.waveManager.getCurrentWaveSettings();
     if (settings.isBoss) {
-      this.setArenaThemeForBoss(settings.bossType || 'sentinel');
-      // On all boss waves, show the boss intro instead of the normal wave notification
-      this.startBossIntro(settings.bossType || 'sentinel');
+      if (this.challengeBossRush) {
+        this.setArenaThemeForBoss('sentinel');
+        this.startChallengeBossRushIntro();
+      } else {
+        this.setArenaThemeForBoss(settings.bossType || 'sentinel');
+        this.startBossIntro(settings.bossType || 'sentinel');
+      }
     } else {
       this.setDefaultArenaTheme();
       this.showWaveNotification();
@@ -645,6 +669,49 @@ export class WaveScene extends Phaser.Scene {
     // Ensure any lingering pillars are removed when not in boss state
     if (!settings.isBoss) this.destroyBossPillars();
     this.hideBreakNotification();
+  }
+
+  private startChallengeBossRushIntro() {
+    if (this.bossIntroActive) return;
+    this.bossIntroActive = true;
+    this.cleanupBossIntro();
+    this.setArenaThemeForBoss('sentinel');
+
+    const centerX = this.scale.width / 2;
+    const centerY = this.scale.height / 2;
+    const title = this.add.text(centerX, centerY - 40, 'CHALLENGE: BOSS RUSH', {
+      fontSize: '40px', color: '#00ffaa', fontStyle: 'bold'
+    }).setOrigin(0.5).setAlpha(0);
+    const subtitle = this.add.text(centerX, centerY + 10, 'Two bosses at once. No mercy.', {
+      fontSize: '24px', color: '#ffffff', fontStyle: 'bold'
+    }).setOrigin(0.5).setAlpha(0);
+
+    this.tweens.add({ targets: title, alpha: { from: 0, to: 1 }, scale: { from: 0.9, to: 1.02 }, duration: 400, ease: 'Back.Out' });
+    this.tweens.add({ targets: subtitle, alpha: { from: 0, to: 1 }, y: centerY + 20, duration: 450, delay: 150 });
+    this.cameras.main.flash(250, 255, 64, 64);
+    this.cameras.main.shake(220, 0.006);
+
+    // Show boss silhouettes immediately at spawn positions
+    const x = this.scale.width / 2;
+    const y = this.scale.height / 2 - 150;
+    const silLeft = this.add.image(x - 90, y, 'boss_sentinel').setAlpha(0).setTint(0x000000).setDepth(999);
+    const silRight = this.add.image(x + 90, y, 'boss_artillery').setAlpha(0).setTint(0x000000).setDepth(999);
+    this.tweens.add({ targets: [silLeft, silRight], alpha: { from: 0, to: 0.75 }, duration: 450, ease: 'Sine.Out' });
+    // Gentle pulse during intro
+    const pulse = this.tweens.add({ targets: [silLeft, silRight], alpha: { from: 0.6, to: 0.85 }, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.InOut', delay: 500 });
+
+    // Hold intro for ~2.4s before spawning bosses
+    const t = this.time.delayedCall(2400, () => {
+      title.destroy();
+      subtitle.destroy();
+      pulse.stop();
+      silLeft.destroy();
+      silRight.destroy();
+      this.cleanupBossIntro();
+      this.spawnBoss('sentinel'); // will spawn both when challengeBossRush is true
+      this.bossIntroActive = false;
+    });
+    this.bossIntroTimers.push(t);
   }
 
   private startBossIntro(type: 'sentinel' | 'artillery') {
@@ -821,56 +888,120 @@ export class WaveScene extends Phaser.Scene {
     const x = this.scale.width / 2;
     const y = this.scale.height / 2 - 150;
     // Boss constructors already add themselves to the scene and physics
-    this.boss = type === 'artillery' ? new ArtilleryBoss(this, x, y, this.player) : new SentinelBoss(this, x, y, this.player);
-    this.boss.setActive(true).setVisible(true).setDepth(1000);
-    // Ensure boss isn't in enemies group
-    if (this.enemies.contains(this.boss as unknown as Phaser.GameObjects.GameObject)) {
-      this.enemies.remove(this.boss as unknown as Phaser.GameObjects.GameObject, false, false);
+    if (this.challengeBossRush) {
+      // Spawn both bosses at once
+      this.boss = new SentinelBoss(this, x - 90, y, this.player);
+      this.boss2 = new ArtilleryBoss(this, x + 90, y, this.player);
+      this.boss.setActive(true).setVisible(true).setDepth(1000);
+      this.boss2.setActive(true).setVisible(true).setDepth(1000);
+      // Ensure neither boss is in enemies group
+      if (this.enemies.contains(this.boss as unknown as Phaser.GameObjects.GameObject)) this.enemies.remove(this.boss as unknown as Phaser.GameObjects.GameObject, false, false);
+      if (this.enemies.contains(this.boss2 as unknown as Phaser.GameObjects.GameObject)) this.enemies.remove(this.boss2 as unknown as Phaser.GameObjects.GameObject, false, false);
+      // Overlaps for bullets
+      this.bossBulletOverlap?.destroy();
+      this.bossBulletOverlap2?.destroy();
+      this.bossBulletOverlap = this.physics.add.overlap(
+        this.bullets,
+        this.boss,
+        this.handleBulletBossCollision as unknown as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+        undefined,
+        this
+      );
+      this.bossBulletOverlap2 = this.physics.add.overlap(
+        this.bullets,
+        this.boss2,
+        this.handleBulletBossCollision as unknown as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+        undefined,
+        this
+      );
+      // Player collisions
+      this.bossPlayerCollider = this.physics.add.collider(this.player, this.boss, this.handlePlayerBossCollision as unknown as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback, undefined, this);
+      this.bossPlayerCollider2 = this.physics.add.collider(this.player, this.boss2, this.handlePlayerBossCollision as unknown as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback, undefined, this);
+      ;(this.boss.body as Phaser.Physics.Arcade.Body).immovable = true
+      ;(this.boss2.body as Phaser.Physics.Arcade.Body).immovable = true
+      // Pillars, UI, adds
+      this.createBossPillars();
+      this.createBossHealthUI();
+      this.startBossAdds();
+    } else {
+      this.boss = type === 'artillery' ? new ArtilleryBoss(this, x, y, this.player) : new SentinelBoss(this, x, y, this.player);
+      this.boss.setActive(true).setVisible(true).setDepth(1000);
+      if (this.enemies.contains(this.boss as unknown as Phaser.GameObjects.GameObject)) {
+        this.enemies.remove(this.boss as unknown as Phaser.GameObjects.GameObject, false, false);
+      }
+      this.bossBulletOverlap?.destroy();
+      this.bossBulletOverlap = this.physics.add.overlap(
+        this.bullets,
+        this.boss,
+        this.handleBulletBossCollision as unknown as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+        undefined,
+        this
+      );
+      this.bossPlayerCollider = this.physics.add.collider(this.player, this.boss, this.handlePlayerBossCollision as unknown as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback, undefined, this);
+      ;(this.boss.body as Phaser.Physics.Arcade.Body).immovable = true
+      this.createBossPillars();
+      this.createBossHealthUI();
+      this.startBossAdds();
     }
-    // Collisions for boss: use overlap for bullets to avoid physics separation side-effects
-    // Clean up any previous boss collider first
-    this.bossBulletOverlap?.destroy();
-    this.bossBulletOverlap = this.physics.add.overlap(
-      this.bullets,
-      this.boss,
-      this.handleBulletBossCollision as unknown as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
-      undefined,
-      this
-    );
-    this.bossPlayerCollider = this.physics.add.collider(this.player, this.boss, this.handlePlayerBossCollision as unknown as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback, undefined, this);
-    // Ensure the boss body is immovable relative to player collision too
-    ;(this.boss.body as Phaser.Physics.Arcade.Body).immovable = true
-    // Create collidable pillars for boss arena
-    this.createBossPillars();
-    this.createBossHealthUI();
-    this.startBossAdds();
   }
 
   private createBossHealthUI() {
+    // Clear existing
     this.bossHealthBar?.destroy();
     this.bossHealthText?.destroy();
-    this.bossHealthBar = this.add.graphics();
+    this.bossHealthBar = undefined;
+    this.bossHealthText = undefined;
+
     const centerX = this.scale.width / 2;
     const topY = 30;
+
+    if (this.challengeBossRush && this.boss && this.boss2) {
+      // Two separate bars stacked vertically
+      this.bossHealthBar = this.add.graphics();
+      this.bossHealthText = this.add.text(centerX, topY - 16, (this.boss instanceof ArtilleryBoss) ? 'ARTILLERY' : 'SENTINEL', { fontSize: '18px', color: '#ff3366', fontStyle: 'bold' }).setOrigin(0.5);
+      // Reuse bossHealthBar for first; draw second in update using same method on a new graphics created here
+      // Create companion graphics/text for boss2 via fields we already added earlier
+      ;(this as unknown as { boss2HealthBar?: Phaser.GameObjects.Graphics }).boss2HealthBar = this.add.graphics();
+      ;(this as unknown as { boss2HealthText?: Phaser.GameObjects.Text }).boss2HealthText = this.add.text(centerX, topY + 24, (this.boss2 instanceof ArtilleryBoss) ? 'ARTILLERY' : 'SENTINEL', { fontSize: '18px', color: '#ff3366', fontStyle: 'bold' }).setOrigin(0.5);
+      this.updateBossHealthUI();
+      return;
+    }
+
+    // Single boss
+    this.bossHealthBar = this.add.graphics();
     this.bossHealthText = this.add.text(centerX, topY - 16, 'BOSS', { fontSize: '18px', color: '#ff3366', fontStyle: 'bold' }).setOrigin(0.5);
-    const draw = () => {
-      if (!this.boss || !this.bossHealthBar) return;
-      const pct = (this.boss as Boss).getHealthPct();
-      const w = 420, h = 16;
-      this.bossHealthBar.clear();
-      this.bossHealthBar.fillStyle(0x222222, 0.9).fillRoundedRect(centerX - w/2, topY, w, h, 8);
-      this.bossHealthBar.fillStyle(0xff3366, 1).fillRoundedRect(centerX - w/2, topY, w * pct, h, 8);
-      this.bossHealthBar.lineStyle(2, 0xffffff, 1).strokeRoundedRect(centerX - w/2, topY, w, h, 8);
-    };
-    draw();
+    this.updateBossHealthUI();
   }
 
   private updateBossHealthUI() {
-    if (!this.boss || !this.bossHealthBar) return;
     const centerX = this.scale.width / 2;
     const topY = 30;
-    const pct = (this.boss as Boss).getHealthPct();
     const w = 420, h = 16;
+
+    // Two bars case
+    if (this.challengeBossRush) {
+      const g1 = this.bossHealthBar as Phaser.GameObjects.Graphics | undefined;
+      const g2 = (this as unknown as { boss2HealthBar?: Phaser.GameObjects.Graphics }).boss2HealthBar;
+      if (g1) {
+        const pct1 = this.boss ? (this.boss as Boss).getHealthPct() : 0;
+        g1.clear();
+        g1.fillStyle(0x222222, 0.9).fillRoundedRect(centerX - w/2, topY, w, h, 8);
+        g1.fillStyle(0xff3366, 1).fillRoundedRect(centerX - w/2, topY, w * pct1, h, 8);
+        g1.lineStyle(2, 0xffffff, 1).strokeRoundedRect(centerX - w/2, topY, w, h, 8);
+      }
+      if (g2) {
+        const pct2 = this.boss2 ? (this.boss2 as Boss).getHealthPct() : 0;
+        const y2 = topY + 40;
+        g2.clear();
+        g2.fillStyle(0x222222, 0.9).fillRoundedRect(centerX - w/2, y2, w, h, 8);
+        g2.fillStyle(0xff3366, 1).fillRoundedRect(centerX - w/2, y2, w * pct2, h, 8);
+        g2.lineStyle(2, 0xffffff, 1).strokeRoundedRect(centerX - w/2, y2, w, h, 8);
+      }
+      return;
+    }
+
+    if (!this.boss || !this.bossHealthBar) return;
+    const pct = (this.boss as Boss).getHealthPct();
     this.bossHealthBar.clear();
     this.bossHealthBar.fillStyle(0x222222, 0.9).fillRoundedRect(centerX - w/2, topY, w, h, 8);
     this.bossHealthBar.fillStyle(0xff3366, 1).fillRoundedRect(centerX - w/2, topY, w * pct, h, 8);
@@ -914,17 +1045,19 @@ export class WaveScene extends Phaser.Scene {
 
     // If neither object is recognized as a bullet (unexpected), fallback by comparing to boss reference
     if (!isObjABullet && !isObjBBullet) {
-      if (objA === this.boss) {
+      if (objA === this.boss || (this.boss2 && objA === this.boss2)) {
         bullet = objB as Phaser.GameObjects.Sprite & { body?: Phaser.Physics.Arcade.Body };
         other = objA as Phaser.GameObjects.Sprite;
-      } else if (objB === this.boss) {
+      } else if (objB === this.boss || (this.boss2 && objB === this.boss2)) {
         bullet = objA as Phaser.GameObjects.Sprite & { body?: Phaser.Physics.Arcade.Body };
         other = objB as Phaser.GameObjects.Sprite;
       }
     }
 
-    // Ensure we never disable the boss by mistake
-    if (other === (this.boss as unknown)) {
+    // Identify which boss was hit (supports boss2 in challenge)
+    const hitBoss = (other === (this.boss as unknown)) ? this.boss : (this.boss2 && other === (this.boss2 as unknown)) ? this.boss2 : undefined;
+    // Ensure we never disable a boss object by mistake
+    if (hitBoss) {
       if (!bullet || !bullet.active) return;
       // Deactivate the bullet without disabling its body, to simplify pooling reuse
       const b = bullet as Phaser.GameObjects.Sprite & { body?: Phaser.Physics.Arcade.Body, ttlEvent?: Phaser.Time.TimerEvent };
@@ -946,37 +1079,75 @@ export class WaveScene extends Phaser.Scene {
 
     // Bosses take fixed damage per hit to guarantee multi-hit fights
     const dmg = 1;
-    const before = (this.boss as unknown as { getCurrentHealth?: () => number }).getCurrentHealth?.();
-    const dead = (this.boss as Boss).takeDamage(dmg);
-    const after = (this.boss as unknown as { getCurrentHealth?: () => number }).getCurrentHealth?.();
+    const before = (hitBoss as unknown as { getCurrentHealth?: () => number }).getCurrentHealth?.();
+    const dead = (hitBoss as Boss).takeDamage(dmg);
+    const after = (hitBoss as unknown as { getCurrentHealth?: () => number }).getCurrentHealth?.();
     if (IS_DEV) console.log('Boss hit', { dmg, before, after, dead });
     this.updateBossHealthUI();
     if (dead) {
-      // Only add to current wave score if the wave hasn't been completed yet
       const waveNum = this.waveManager.getCurrentWave();
       if (!this.scoreManager.isWaveCompleted(waveNum)) {
-        this.currentWaveScore += (this.boss as Boss).getScoreValue();
+        this.currentWaveScore += (hitBoss as Boss).getScoreValue();
       }
-      // Complete the boss wave
+      // If in boss rush, only complete when both bosses are dead
+      if (this.challengeBossRush && this.boss2 && (hitBoss === this.boss ? this.boss2.active : this.boss.active)) {
+        // One boss down: destroy just that boss; keep fight going
+        (hitBoss as Boss).destroy();
+        if (hitBoss === this.boss) this.boss = undefined;
+        else this.boss2 = undefined;
+        this.updateBossHealthUI();
+        return;
+      }
+      // Otherwise, finish the wave
       this.completeCurrentWave(true);
-      // Reward snacks for defeating a boss
       addSnacks(1);
       this.gameUI.updateSnacks(getSnacks());
-      this.cleanupBoss();
-      this.cameras.main.shake(200, 0.01);
-      this.waveManager.startBreak();
-      this.showBreakNotification();
-      const waveSettings = this.waveManager.getCurrentWaveSettings();
-      this.breakTimer = this.time.delayedCall(waveSettings.breakDuration, () => {
-        this.startNextWave();
-      });
+      // If running as challenge, show congrats overlay and return to selector
+      if ((this as unknown as { _challengeMode?: boolean })._challengeMode) {
+        this.showChallengeCompleteOverlay();
+      } else {
+        this.cleanupBoss();
+        this.cameras.main.shake(200, 0.01);
+        this.waveManager.startBreak();
+        this.showBreakNotification();
+        const waveSettings = this.waveManager.getCurrentWaveSettings();
+        this.breakTimer = this.time.delayedCall(waveSettings.breakDuration, () => {
+          this.startNextWave();
+        });
+      }
     }
+  }
+
+  private showChallengeCompleteOverlay() {
+    this.physics.pause();
+    this.cleanupBoss();
+    const cx = this.scale.width / 2;
+    const cy = this.scale.height / 2;
+    const id = (this as unknown as { _challengeId?: string })._challengeId || 'challenge';
+    const messageMap: Record<string, string> = {
+      boss_rush: 'Boss Rush Master! Two at once? Easy. ',
+      split_attention: 'Split Focus, Solid Aim. You kept control.',
+      glass_cannon: 'Fragile but Fearless. You survived!',
+      speed_demon: 'Too Fast to Fail. You tamed the speed.'
+    };
+    const msg = messageMap[id] || 'Challenge Complete!';
+    const title = this.add.text(cx, cy - 40, 'CONGRATULATIONS!', { fontSize: '56px', color: '#00ffaa', fontStyle: 'bold' }).setOrigin(0.5);
+    const subtitle = this.add.text(cx, cy + 10, msg, { fontSize: '24px', color: '#ffffff' }).setOrigin(0.5);
+    const button = this.add.text(cx, cy + 80, 'CONTINUE', { fontSize: '28px', color: '#111827', backgroundColor: '#22d3ee', padding: { x: 24, y: 10 } }).setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        try { window.location.href = '/challenge'; } catch { this.scene.start('StartMenuScene'); }
+      })
+      .on('pointerover', () => button.setStyle({ backgroundColor: '#67e8f9' }))
+      .on('pointerout', () => button.setStyle({ backgroundColor: '#22d3ee' }));
   }
 
   private cleanupBoss() {
     // Destroy boss-specific colliders
     if (this.bossBulletOverlap) { this.bossBulletOverlap.destroy(); this.bossBulletOverlap = undefined; }
+    if (this.bossBulletOverlap2) { this.bossBulletOverlap2.destroy(); this.bossBulletOverlap2 = undefined; }
     if (this.bossPlayerCollider) { this.bossPlayerCollider.destroy(); this.bossPlayerCollider = undefined; }
+    if (this.bossPlayerCollider2) { this.bossPlayerCollider2.destroy(); this.bossPlayerCollider2 = undefined; }
     // Stop boss add spawns
     this.stopBossAdds();
     // Clear any adds still alive
@@ -984,13 +1155,23 @@ export class WaveScene extends Phaser.Scene {
     // Remove boss UI
     if (this.bossHealthBar) { this.bossHealthBar.destroy(); this.bossHealthBar = undefined; }
     if (this.bossHealthText) { this.bossHealthText.destroy(); this.bossHealthText = undefined; }
+    const g2 = (this as unknown as { boss2HealthBar?: Phaser.GameObjects.Graphics }).boss2HealthBar;
+    const t2 = (this as unknown as { boss2HealthText?: Phaser.GameObjects.Text }).boss2HealthText;
+    if (g2) (g2 as Phaser.GameObjects.Graphics).destroy();
+    if (t2) (t2 as Phaser.GameObjects.Text).destroy();
+    ;(this as unknown as { boss2HealthBar?: Phaser.GameObjects.Graphics }).boss2HealthBar = undefined as unknown as Phaser.GameObjects.Graphics;
+    ;(this as unknown as { boss2HealthText?: Phaser.GameObjects.Text }).boss2HealthText = undefined as unknown as Phaser.GameObjects.Text;
     // Destroy boss instance
     if (this.boss && this.boss.active) {
       (this.boss as Boss).destroy();
     }
+    if (this.boss2 && this.boss2.active) {
+      (this.boss2 as Boss).destroy();
+    }
     // Remove boss pillars and their colliders
     this.destroyBossPillars();
     this.boss = undefined;
+    this.boss2 = undefined;
     this.setDefaultArenaTheme();
   }
 

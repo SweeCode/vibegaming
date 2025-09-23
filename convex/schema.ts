@@ -107,4 +107,13 @@ export default defineSchema({
     snapshot: skillBuildSnapshotValidator,
     updatedAt: v.number()
   }).index('by_user_slot', ['userKey', 'slot'])
+  ,
+  achievements: defineTable({
+    deviceId: v.string(),
+    achievementId: v.string(),
+    title: v.string(),
+    unlockedAt: v.number()
+  })
+    .index('by_device', ['deviceId'])
+    .index('by_device_ach', ['deviceId', 'achievementId'])
 })
