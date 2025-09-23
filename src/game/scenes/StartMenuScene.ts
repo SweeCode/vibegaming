@@ -10,6 +10,7 @@ export class StartMenuScene extends Phaser.Scene {
   private optionsButton!: Phaser.GameObjects.Text;
   private petButton!: Phaser.GameObjects.Text;
   private leaderboardButton!: Phaser.GameObjects.Text;
+  private achievementsButton?: Phaser.GameObjects.Text;
   private gameModesButton?: Phaser.GameObjects.Text;
   private titleText!: Phaser.GameObjects.Text;
   private leaderboardTitle?: Phaser.GameObjects.Text;
@@ -65,7 +66,7 @@ export class StartMenuScene extends Phaser.Scene {
     this.createShooterBackground();
 
     // Game Title
-    this.titleText = this.add.text(centerX, centerY - 200, 'BOSS RUSH', {
+    this.titleText = this.add.text(centerX, centerY - 200, 'Space Shapes', {
       fontSize: '72px',
       color: '#ffffff',
       fontStyle: 'bold'
@@ -145,6 +146,18 @@ export class StartMenuScene extends Phaser.Scene {
 
     // Ensure WebAudio context resumes only after a user gesture to avoid browser warnings
     this.setupAudioUnlock();
+
+    // Achievements Button
+    this.achievementsButton = this.add.text(centerX, centerY + 160, 'ACHIEVEMENTS', {
+      fontSize: '28px',
+      color: '#ffcc00',
+      backgroundColor: '#664400',
+      padding: { x: 20, y: 10 }
+    }).setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.scene.start('AchievementsScene'))
+      .on('pointerover', () => this.achievementsButton?.setStyle({ backgroundColor: '#886600' }))
+      .on('pointerout', () => this.achievementsButton?.setStyle({ backgroundColor: '#664400' }));
   }
 
   private createShooterBackground() {
@@ -342,6 +355,7 @@ export class StartMenuScene extends Phaser.Scene {
     this.optionsButton.setVisible(false);
     this.petButton.setVisible(false);
     this.leaderboardButton.setVisible(false);
+    this.achievementsButton?.setVisible(false);
     this.gameModesButton?.setVisible(false);
     this.petButton?.setVisible(false);
     this.titleText.setVisible(false);
@@ -589,6 +603,7 @@ export class StartMenuScene extends Phaser.Scene {
     this.optionsButton.setVisible(true);
     this.petButton.setVisible(true);
     this.leaderboardButton.setVisible(true);
+    this.achievementsButton?.setVisible(true);
     this.gameModesButton?.setVisible(true);
     this.petButton?.setVisible(true);
 
@@ -694,6 +709,7 @@ export class StartMenuScene extends Phaser.Scene {
     this.optionsButton.setVisible(false);
     this.petButton.setVisible(false);
     this.leaderboardButton.setVisible(false);
+    this.achievementsButton?.setVisible(false);
     this.gameModesButton?.setVisible(false);
     this.petButton?.setVisible(false);
 
@@ -767,6 +783,7 @@ export class StartMenuScene extends Phaser.Scene {
     this.optionsButton.setVisible(true);
     this.petButton.setVisible(true);
     this.leaderboardButton.setVisible(true);
+    this.achievementsButton?.setVisible(true);
     this.gameModesButton?.setVisible(true);
     this.petButton?.setVisible(true);
 
