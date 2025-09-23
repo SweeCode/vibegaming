@@ -148,17 +148,26 @@ export class StartMenuScene extends Phaser.Scene {
     // Ensure WebAudio context resumes only after a user gesture to avoid browser warnings
     this.setupAudioUnlock();
 
-    // Achievements Button
-    this.achievementsButton = this.add.text(centerX, centerY + 160, 'ACHIEVEMENTS', {
-      fontSize: '28px',
+    // Achievements Button (fixed position bottom-left)
+    this.achievementsButton = this.add.text(20, this.scale.height - 40, 'ACHIEVEMENTS', {
+      fontSize: '20px',
       color: '#ffcc00',
       backgroundColor: '#664400',
-      padding: { x: 20, y: 10 }
-    }).setOrigin(0.5)
+      padding: { x: 12, y: 6 }
+    }).setOrigin(0, 0.5)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.scene.start('AchievementsScene'))
       .on('pointerover', () => this.achievementsButton?.setStyle({ backgroundColor: '#886600' }))
       .on('pointerout', () => this.achievementsButton?.setStyle({ backgroundColor: '#664400' }));
+
+    // Auto-open achievements if requested via URL
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get('show') === 'achievements') {
+        this.scene.start('AchievementsScene');
+        return;
+      }
+    } catch {}
   }
 
   private createShooterBackground() {
@@ -740,6 +749,17 @@ export class StartMenuScene extends Phaser.Scene {
       .on('pointerdown', this.startWaveMode, this)
       .on('pointerover', () => this.waveButton?.setStyle({ backgroundColor: '#660066' }))
       .on('pointerout', () => this.waveButton?.setStyle({ backgroundColor: '#440044' }));
+
+    const challengeButton = this.add.text(centerX, centerY - 60, 'CHALLENGE', {
+      fontSize: '28px',
+      color: '#00ffff',
+      backgroundColor: '#003344',
+      padding: { x: 20, y: 10 }
+    }).setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => { try { window.location.href = '/challenge'; } catch {} })
+      .on('pointerover', () => challengeButton.setStyle({ backgroundColor: '#004455' }))
+      .on('pointerout', () => challengeButton.setStyle({ backgroundColor: '#003344' }));
 
     this.bossTestButton = this.add.text(centerX - 100, centerY + 20, 'BOSS TEST', {
       fontSize: '20px',
