@@ -27,6 +27,7 @@ export class StartMenuScene extends Phaser.Scene {
   private modesBackButton?: Phaser.GameObjects.Text;
   private waveProgressButton?: Phaser.GameObjects.Text;
   private waveProgressDisplay?: Phaser.GameObjects.Text;
+  private waveResetButton?: Phaser.GameObjects.Text;
   private showingLeaderboard = false;
   private showingModes = false;
   private showingWaveProgress = false;
@@ -793,6 +794,7 @@ export class StartMenuScene extends Phaser.Scene {
     if (this.modesBackButton) { this.modesBackButton.destroy(); this.modesBackButton = undefined; }
     if (this.waveProgressButton) { this.waveProgressButton.destroy(); this.waveProgressButton = undefined; }
     if (this.waveProgressDisplay) { this.waveProgressDisplay.destroy(); this.waveProgressDisplay = undefined; }
+    if (this.waveResetButton) { this.waveResetButton.destroy(); this.waveResetButton = undefined; }
   }
 
   private showWaveProgress() {
@@ -822,25 +824,29 @@ export class StartMenuScene extends Phaser.Scene {
       align: 'center'
     }).setOrigin(0.5);
 
-    // Add reset button if there's progress
-    if (highestWave > 0) {
-      const resetButton = this.add.text(centerX, centerY + 120, 'RESET PROGRESS', {
-        fontSize: '18px',
-        color: '#ff6666',
-        backgroundColor: '#440000',
-        padding: { x: 15, y: 8 }
-      }).setOrigin(0.5)
-        .setInteractive({ useHandCursor: true })
-        .on('pointerdown', async () => {
-          const success = await this.scoreManager?.resetProgress();
-          if (success) {
-            this.hideWaveProgress();
-            this.showGameModes(); // Refresh the game modes to show updated progress
-          }
-        }, this)
-        .on('pointerover', () => resetButton.setStyle({ backgroundColor: '#660000' }))
-        .on('pointerout', () => resetButton.setStyle({ backgroundColor: '#440000' }));
-    }
+    // Add reset button (always shown on the progress screen)
+    if (this.waveResetButton) { this.waveResetButton.destroy(); this.waveResetButton = undefined; }
+    this.waveResetButton = this.add.text(centerX, centerY + 120, 'RESET PROGRESS', {
+      fontSize: '18px',
+      color: '#ff6666',
+      backgroundColor: '#440000',
+      padding: { x: 15, y: 8 }
+    }).setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', async () => {
+        const success = await this.scoreManager?.resetProgress();
+        if (success) {
+          // Stay on the progress screen and refresh stats
+          const p = this.scoreManager?.getProgress();
+          const newHighest = p?.highestWave || 0;
+          const newTotal = p?.totalScore || 0;
+          this.waveProgressDisplay?.setText(
+            `WAVE PROGRESS\n\nHighest Wave: ${newHighest}\nTotal Score: ${newTotal}\n\nClick anywhere to return`
+          );
+        }
+      }, this)
+      .on('pointerover', () => this.waveResetButton?.setStyle({ backgroundColor: '#660000' }))
+      .on('pointerout', () => this.waveResetButton?.setStyle({ backgroundColor: '#440000' }));
 
     // Make clickable to return
     this.waveProgressDisplay.setInteractive({ useHandCursor: true })
@@ -852,6 +858,7 @@ export class StartMenuScene extends Phaser.Scene {
     this.showingWaveProgress = false;
 
     this.waveProgressDisplay?.destroy();
+    if (this.waveResetButton) { this.waveResetButton.destroy(); this.waveResetButton = undefined; }
 
     // Show game mode buttons again
     this.classicButton?.setVisible(true);
