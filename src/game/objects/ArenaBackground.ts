@@ -325,7 +325,7 @@ class SpaceThemeLayer implements ThemeLayer {
   }
 
   private createStreaks() {
-    const count = 36;
+    const count = 0; // Disabled: remove falling white streaks
     for (let i = 0; i < count; i++) {
       const x = Phaser.Math.FloatBetween(0, this.width);
       const y = Phaser.Math.FloatBetween(0, this.height);

@@ -11,6 +11,7 @@ import { loadPetSettings } from '../systems/petSettings';
 import { getBulletSpeedMultiplier, getBulletSizeMultiplier, getSnacks } from '../systems/petUpgrades';
 import { getPlayerColor } from '../systems/playerAppearance';
 import { ArenaBackground } from '../objects/ArenaBackground';
+import { AchievementsAPI } from '../systems/AchievementsManager';
 
 export class MainScene extends Phaser.Scene {
   private player!: Player;
@@ -272,6 +273,8 @@ export class MainScene extends Phaser.Scene {
     const dmg = fromDrone ? Math.max(1, Math.ceil((typeof customDroneDmg === 'number' ? customDroneDmg : playerStats.bulletDamage * 0.5))) : playerStats.bulletDamage;
     const isDead = enemyObj.takeDamage(dmg);
     if (isDead) {
+      // Placeholder example: first enemy defeated unlock
+      try { AchievementsAPI.unlock('first_blood'); } catch {}
       this.score += enemyObj.getScoreValue();
       // Split behavior: if splitter, spawn minis
       const isSplitter = (enemyObj as unknown as Phaser.GameObjects.Sprite).texture?.key === 'enemy_splitter';
