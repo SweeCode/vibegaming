@@ -10,6 +10,7 @@ import { ScoreEntryScene } from '@/game/scenes/ScoreEntryScene';
 import { PauseMenuScene } from '@/game/scenes/PauseMenuScene';
 import { WaveScene } from '@/game/scenes/WaveScene';
 import { CustomizationScene } from '@/game/scenes/CustomizationScene';
+import { AchievementsScene } from '@/game/scenes/AchievementsScene';
 
 const Game = () => {
   const gameRef = useRef<HTMLDivElement>(null);
@@ -31,7 +32,7 @@ const Game = () => {
         disableWebAudio: false,
         noAudio: false
       },
-      scene: [StartMenuScene, PetScene, MainScene, WaveScene, ScoreEntryScene, PauseMenuScene, CustomizationScene]
+      scene: [StartMenuScene, PetScene, MainScene, WaveScene, ScoreEntryScene, PauseMenuScene, CustomizationScene, AchievementsScene]
     };
 
     gameInstance.current = new Phaser.Game(config);
