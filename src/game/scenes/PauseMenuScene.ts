@@ -6,6 +6,8 @@ export class PauseMenuScene extends Phaser.Scene {
   private titleText!: Phaser.GameObjects.Text;
   private background!: Phaser.GameObjects.Rectangle;
   private parentScene: string = 'MainScene'; // Default to MainScene
+  private crtToggle!: Phaser.GameObjects.Text;
+  private crtEnabled: boolean = true;
 
   constructor() {
     super({ key: 'PauseMenuScene' });
@@ -30,6 +32,14 @@ export class PauseMenuScene extends Phaser.Scene {
       fontStyle: 'bold'
     }).setOrigin(0.5);
 
+    // Detect current CRT state from parent scene if available
+    try {
+      const parent = this.scene.get(this.parentScene) as unknown as { arenaBackground?: { isCRTEnabled?: () => boolean } };
+      if (parent && parent['arenaBackground'] && typeof parent['arenaBackground'].isCRTEnabled === 'function') {
+        this.crtEnabled = !!parent['arenaBackground'].isCRTEnabled();
+      }
+    } catch {}
+
     // Resume button
     this.resumeButton = this.add.text(centerX, centerY - 20, 'RESUME', {
       fontSize: '32px',
@@ -41,6 +51,18 @@ export class PauseMenuScene extends Phaser.Scene {
       .on('pointerdown', this.resumeGame, this)
       .on('pointerover', () => this.resumeButton.setStyle({ backgroundColor: '#006600' }))
       .on('pointerout', () => this.resumeButton.setStyle({ backgroundColor: '#004400' }));
+
+    // CRT Toggle button (below Quit, above instructions)
+    this.crtToggle = this.add.text(centerX, centerY + 120, this.getCRTLabel(), {
+      fontSize: '28px',
+      color: '#ffffff',
+      backgroundColor: '#112233',
+      padding: { x: 18, y: 8 }
+    }).setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.toggleCRT())
+      .on('pointerover', () => this.crtToggle.setStyle({ backgroundColor: '#1b314a' }))
+      .on('pointerout', () => this.crtToggle.setStyle({ backgroundColor: '#112233' }));
 
     // Quit to menu button
     this.quitButton = this.add.text(centerX, centerY + 40, 'QUIT TO MENU', {
@@ -55,7 +77,7 @@ export class PauseMenuScene extends Phaser.Scene {
       .on('pointerout', () => this.quitButton.setStyle({ backgroundColor: '#440000' }));
 
     // Instructions
-    this.add.text(centerX, centerY + 120, 'Press ESC to resume', {
+    this.add.text(centerX, centerY + 160, 'Press ESC to resume', {
       fontSize: '20px',
       color: '#aaaaaa'
     }).setOrigin(0.5);
@@ -75,5 +97,20 @@ export class PauseMenuScene extends Phaser.Scene {
     this.scene.stop(this.parentScene);
     this.scene.stop();
     this.scene.start('StartMenuScene');
+  }
+
+  private toggleCRT() {
+    this.crtEnabled = !this.crtEnabled;
+    this.crtToggle.setText(this.getCRTLabel());
+    try {
+      const parent = this.scene.get(this.parentScene) as unknown as { arenaBackground?: { enableCRT?: (v: boolean) => void } };
+      if (parent && parent['arenaBackground'] && typeof parent['arenaBackground'].enableCRT === 'function') {
+        parent['arenaBackground'].enableCRT(this.crtEnabled);
+      }
+    } catch {}
+  }
+
+  private getCRTLabel(): string {
+    return this.crtEnabled ? 'CRT: ON' : 'CRT: OFF';
   }
 }

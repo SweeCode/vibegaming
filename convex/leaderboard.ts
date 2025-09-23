@@ -38,3 +38,27 @@ export const submitScore = mutation({
     return { ok: true }
   }
 })
+
+export const resetDeviceScores = mutation({
+  args: {
+    deviceId: v.string(),
+    mode: v.optional(v.union(v.literal('endless'), v.literal('wave')))
+  },
+  handler: async (ctx, { deviceId, mode }) => {
+    let query = ctx.db
+      .query('scores')
+      .filter(q => q.eq(q.field('deviceId'), deviceId))
+
+    if (mode) {
+      query = query.filter(q => q.eq(q.field('mode'), mode))
+    }
+
+    const rows = await query.collect()
+
+    for (const row of rows) {
+      await ctx.db.delete(row._id)
+    }
+
+    return { deleted: rows.length }
+  }
+})

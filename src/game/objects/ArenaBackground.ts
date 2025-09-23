@@ -33,6 +33,7 @@ export class ArenaBackground {
   private vignette?: Phaser.GameObjects.Graphics;
   private resizeHandler: (size: Phaser.Structs.Size) => void;
   private destroyed = false;
+  private crtEnabled = true;
 
   constructor(private scene: Phaser.Scene) {
     this.resizeHandler = (size: Phaser.Structs.Size) => this.handleResize(size.width, size.height);
@@ -124,15 +125,15 @@ export class ArenaBackground {
 
     this.scanlines = this.scene.add.tileSprite(0, 0, width, height, SCANLINE_KEY)
       .setOrigin(0, 0)
-      .setAlpha(0.18)
+      .setAlpha(0.19)
       .setDepth(OVERLAY_DEPTH)
       .setScrollFactor(0)
-      .setBlendMode(Phaser.BlendModes.MULTIPLY)
+      .setBlendMode(Phaser.BlendModes.SCREEN)
       .setVisible(false);
 
     this.noiseOverlay = this.scene.add.tileSprite(0, 0, width, height, NOISE_KEY)
       .setOrigin(0, 0)
-      .setAlpha(0.14)
+      .setAlpha(0.2)
       .setDepth(OVERLAY_DEPTH + 1)
       .setScrollFactor(0)
       .setBlendMode(Phaser.BlendModes.ADD)
@@ -147,33 +148,105 @@ export class ArenaBackground {
   private applyCRTPipeline() {
     const renderer = this.scene.game.renderer;
     if (!(renderer instanceof Phaser.Renderer.WebGL.WebGLRenderer)) return;
-    type PipelineManagerLike = { has?: (key: string) => boolean; add?: (key: string, pipeline: unknown) => void }
-    const pm = renderer.pipelines as unknown as PipelineManagerLike
-    if (typeof pm.has === 'function' && typeof pm.add === 'function' && !pm.has(CRT_PIPELINE_KEY)) {
-      pm.add(CRT_PIPELINE_KEY, new CRTPipeline(this.scene.game))
+    const pmAny = renderer.pipelines as unknown as {
+      has?: (key: string) => boolean;
+      add?: (key: string, pipelineClass: unknown) => void;
+      hasPostPipeline?: (key: string) => boolean;
+      addPostPipeline?: (key: string, pipelineClass: unknown) => void;
     }
-    type CameraWithPipelines = Phaser.Cameras.Scene2D.Camera & { postPipeline?: unknown[]; setPostPipeline: (p: unknown) => void }
+    if (typeof pmAny.hasPostPipeline === 'function' && typeof pmAny.addPostPipeline === 'function') {
+      if (!pmAny.hasPostPipeline(CRT_PIPELINE_KEY)) {
+        pmAny.addPostPipeline(CRT_PIPELINE_KEY, CRTPipeline)
+      }
+    } else if (typeof pmAny.has === 'function' && typeof pmAny.add === 'function') {
+      if (!pmAny.has(CRT_PIPELINE_KEY)) {
+        // Older Phaser expects an instance for add()
+        pmAny.add(CRT_PIPELINE_KEY, new CRTPipeline(this.scene.game))
+      }
+    }
+    type CameraWithPipelines = Phaser.Cameras.Scene2D.Camera & { postPipeline?: unknown[]; addPostPipeline?: (p: unknown) => void; setPostPipeline?: (p: unknown) => void }
     const camera = this.scene.cameras.main as CameraWithPipelines
     const list = Array.isArray(camera.postPipeline) ? camera.postPipeline : []
     const already = list.some(p => p instanceof CRTPipeline)
     if (!already) {
-      camera.setPostPipeline(CRTPipeline)
+      if (typeof camera.addPostPipeline === 'function') {
+        camera.addPostPipeline(CRTPipeline)
+      } else if (typeof camera.setPostPipeline === 'function') {
+        camera.setPostPipeline(CRTPipeline)
+      }
+    }
+    // Set a default CRT intensity on any instances attached to the camera
+    const camAny = camera as unknown as { getPostPipeline?: (p: unknown) => unknown[] }
+    const instances = typeof camAny.getPostPipeline === 'function' ? camAny.getPostPipeline(CRTPipeline) : []
+    if (Array.isArray(instances)) {
+      for (const p of instances) {
+        const pipe = p as unknown as { intensity?: number }
+        if (typeof pipe.intensity === 'number') {
+          pipe.intensity = 1.0
+        }
+      }
     }
   }
 
+  // Public controls to adjust/toggle CRT at runtime
+  enableCRT(enabled: boolean) {
+    this.crtEnabled = enabled;
+    const camera = this.scene.cameras.main as unknown as { addPostPipeline?: (p: unknown) => void; setPostPipeline?: (p: unknown) => void; removePostPipeline?: (p: unknown) => void; postPipeline?: unknown[] }
+    if (!camera) return
+    if (enabled) {
+      const list: unknown[] = Array.isArray((camera as unknown as { postPipeline?: unknown[] }).postPipeline)
+        ? ((camera as unknown as { postPipeline?: unknown[] }).postPipeline as unknown[])
+        : []
+      const already = list.some(p => p instanceof CRTPipeline)
+      if (!already) {
+        if (typeof camera.addPostPipeline === 'function') camera.addPostPipeline(CRTPipeline)
+        else if (typeof camera.setPostPipeline === 'function') camera.setPostPipeline(CRTPipeline)
+      }
+    } else if (typeof camera.removePostPipeline === 'function') {
+      camera.removePostPipeline(CRTPipeline)
+    }
+    // Toggle overlays visibility together with CRT pipeline
+    const visible = enabled === true;
+    this.scanlines?.setVisible(visible);
+    this.noiseOverlay?.setVisible(visible);
+    this.vignette?.setVisible(visible);
+  }
+
+  setCRTIntensity(value: number) {
+    const v = Phaser.Math.Clamp(value, 0, 2)
+    const camera = this.scene.cameras.main as unknown as { getPostPipeline?: (p: unknown) => unknown[] }
+    if (typeof camera.getPostPipeline !== 'function') return
+    const instances = camera.getPostPipeline(CRTPipeline)
+    if (Array.isArray(instances)) {
+      for (const p of instances) {
+        const pipe = p as unknown as { intensity?: number }
+        if (typeof pipe.intensity === 'number') {
+          pipe.intensity = v
+        }
+      }
+    }
+  }
+
+  isCRTEnabled(): boolean {
+    return this.crtEnabled;
+  }
+
   private drawVignette(graphics: Phaser.GameObjects.Graphics, width: number, height: number) {
+    graphics.clear();
     graphics.fillStyle(0x000000, 0);
     graphics.fillRect(0, 0, width, height);
-    graphics.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0.55, 0.55, 0.85, 0.85);
+    // Lighter vignette to avoid dark scene
+    graphics.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0.25, 0.25, 0.55, 0.55);
     graphics.fillRect(0, 0, width, height);
     graphics.setScrollFactor(0);
     graphics.setBlendMode(Phaser.BlendModes.MULTIPLY);
   }
 
   private showOverlay() {
-    this.scanlines?.setVisible(true);
-    this.noiseOverlay?.setVisible(true);
-    this.vignette?.setVisible(true);
+    const visible = this.crtEnabled;
+    this.scanlines?.setVisible(visible);
+    this.noiseOverlay?.setVisible(visible);
+    this.vignette?.setVisible(visible);
   }
 
   private getBackgroundColor(theme: ArenaTheme): number {
@@ -299,7 +372,6 @@ class HellThemeLayer implements ThemeLayer {
     this.width = width;
     this.height = height;
     this.haze = this.createHeatHaze();
-    this.createPillars();
     this.createEmbers();
     this.hide();
   }
@@ -515,8 +587,10 @@ class PrisonThemeLayer implements ThemeLayer {
 function ensureScanlineTexture(scene: Phaser.Scene) {
   if (scene.textures.exists(SCANLINE_KEY)) return;
   const gfx = scene.add.graphics({ x: 0, y: 0 }).setVisible(false);
-  gfx.fillStyle(0xffffff, 0.12);
-  gfx.fillRect(0, 0, 4, 1);
+  // Brighter, thicker scanlines with spacing
+  gfx.clear();
+  gfx.fillStyle(0xffffff, 0.8);
+  gfx.fillRect(0, 0, 4, 2); // 2px lit, 2px gap in a 4px tile
   gfx.generateTexture(SCANLINE_KEY, 4, 4);
   gfx.destroy();
 }

@@ -55,6 +55,21 @@ export async function submitScoreConvex(args: { name: string; score: number; tim
   }
 }
 
+export async function resetLeaderboardConvex(mode?: 'endless' | 'wave'): Promise<boolean> {
+  const convex = getConvexClient()
+  if (!convex) return false
+  try {
+    await (convex as unknown as { mutation: (name: string, args: unknown) => Promise<unknown> }).mutation('leaderboard:resetDeviceScores', {
+      mode,
+      deviceId: getGuestId()
+    })
+    return true
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'production') console.warn('Failed to reset leaderboard via Convex:', error)
+    return false
+  }
+}
+
 export type WaveTotalsPayload = {
   totalScore: number
   completedWaves: number

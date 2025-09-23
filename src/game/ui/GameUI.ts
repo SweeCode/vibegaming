@@ -59,6 +59,7 @@ export class GameUI {
       color: '#888888'
     });
     this.waveProgressText.setAlpha(0.7);
+    this.waveProgressText.setVisible(false);
     
     // ESC instruction
     this.scene.add.text(16, this.scene.scale.height - 40, 'Press ESC to return to menu', {
@@ -159,17 +160,8 @@ export class GameUI {
 
   updateWaveProgress(completedWaves: number, highestWave: number, currentWave?: number) {
     if (this.waveProgressText) {
-      if (currentWave !== undefined) {
-        // Wave mode - show only highest completed wave discreetly
-        if (highestWave > 0) {
-          this.waveProgressText.setText(`Best: Wave ${highestWave}`);
-        } else {
-          this.waveProgressText.setText('');
-        }
-      } else {
-        // Show overall progress
-        this.waveProgressText.setText(`Completed Waves: ${completedWaves}/${highestWave}`);
-      }
+      this.waveProgressText.setText('');
+      this.waveProgressText.setVisible(false);
     }
   }
 
@@ -181,7 +173,7 @@ export class GameUI {
 
   showWaveProgress() {
     if (this.waveProgressText) {
-      this.waveProgressText.setVisible(true);
+      this.waveProgressText.setVisible(false);
     }
   }
 

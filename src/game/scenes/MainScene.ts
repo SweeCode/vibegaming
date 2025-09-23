@@ -329,10 +329,11 @@ export class MainScene extends Phaser.Scene {
   }
 
   private handleGameOver() {
+    if (this.gameOver) return;
+    this.gameOver = true;
     this.physics.pause();
     this.spawnTimer.paused = true;
     this.player.setTint(0xff0000);
-    this.gameOver = true;
     this.gameUI.showGameOver(
       () => this.resetGame(),
       () => this.scene.start('StartMenuScene'),

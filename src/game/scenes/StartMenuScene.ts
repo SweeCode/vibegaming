@@ -1,6 +1,6 @@
 import * as Phaser from 'phaser';
 import { IS_DEV } from '../config/gameConfig';
-import { fetchTopScoresConvex } from '@/lib/convexClient';
+import { fetchTopScoresConvex, resetLeaderboardConvex } from '@/lib/convexClient';
 import { ensureGuestSessionInitialized } from '@/lib/guestSession';
 import { ScoreManager } from '../systems/ScoreManager';
 import { getBestLevel, isPetUnlockedFlag, markPetUnlocked } from '../systems/petSettings';
@@ -22,6 +22,7 @@ export class StartMenuScene extends Phaser.Scene {
   private backButton?: Phaser.GameObjects.Text;
   private classicButton?: Phaser.GameObjects.Text;
   private waveButton?: Phaser.GameObjects.Text;
+  private bossTestButton?: Phaser.GameObjects.Text;
   private modesBackButton?: Phaser.GameObjects.Text;
   private waveProgressButton?: Phaser.GameObjects.Text;
   private waveProgressDisplay?: Phaser.GameObjects.Text;
@@ -33,6 +34,7 @@ export class StartMenuScene extends Phaser.Scene {
   private petOverlay?: Phaser.GameObjects.Container;
   private petButtonState: 'loading' | 'locked' | 'unlocked' = 'loading';
   private petRequirementTip?: Phaser.GameObjects.Text;
+  private leaderboardResetInProgress = false;
   // Background FX
   private bgStarsFar?: Phaser.GameObjects.Group;
   private bgStarsNear?: Phaser.GameObjects.Group;
@@ -244,6 +246,10 @@ export class StartMenuScene extends Phaser.Scene {
 
   private startWaveMode() {
     this.scene.start('WaveScene');
+  }
+
+  private startBossTestMode() {
+    this.scene.start('WaveScene', { bossOnly: true });
   }
 
   private showOptions() {
@@ -608,27 +614,52 @@ export class StartMenuScene extends Phaser.Scene {
     // Reset leaderboard with Ctrl+Shift+R
     this.input.keyboard?.on('keydown', (event: KeyboardEvent) => {
       if (event.ctrlKey && event.shiftKey && event.key === 'R') {
-        this.resetLeaderboard();
+        void this.resetLeaderboard();
       }
     });
   }
 
-  private resetLeaderboard() {
-    // Clear leaderboard data for both modes
-    localStorage.removeItem('leaderboard');
-    localStorage.removeItem('leaderboard_wave');
+  private async resetLeaderboard() {
+    if (this.leaderboardResetInProgress) return;
+    this.leaderboardResetInProgress = true;
 
-    // Show confirmation message
-    const confirmText = this.add.text(this.scale.width / 2, this.scale.height - 100, 'Leaderboards Reset!', {
+    const statusText = this.add.text(this.scale.width / 2, this.scale.height - 100, 'Resetting leaderboards...', {
       fontSize: '32px',
-      color: '#ff0000',
+      color: '#ffff66',
       fontStyle: 'bold'
     }).setOrigin(0.5);
 
-    // Remove message after 2 seconds
+    const remoteSuccess = await resetLeaderboardConvex();
+
+    if (remoteSuccess) {
+      await this.resetLeaderboardLocalOnly();
+      statusText.setText('Your entries reset!');
+      statusText.setColor('#00ffaa');
+    } else {
+      await this.resetLeaderboardLocalOnly();
+      statusText.setText('Remote reset failed (cache cleared only)');
+      statusText.setColor('#ff6666');
+    }
+
     this.time.delayedCall(2000, () => {
-      confirmText.destroy();
+      statusText.destroy();
     });
+
+    this.leaderboardResetInProgress = false;
+  }
+
+  private async resetLeaderboardLocalOnly() {
+    // Clear cached leaderboard data so the UI reflects the server state
+    try {
+      localStorage.removeItem('leaderboard');
+      localStorage.removeItem('leaderboard_wave');
+    } catch (error) {
+      if (IS_DEV) console.warn('Failed clearing cached leaderboards:', error);
+    }
+
+    if (this.showingLeaderboard) {
+      await this.showSpecificLeaderboard(this.currentLeaderboardMode);
+    }
   }
 
   private setupAudioUnlock() {
@@ -693,6 +724,17 @@ export class StartMenuScene extends Phaser.Scene {
       .on('pointerover', () => this.waveButton?.setStyle({ backgroundColor: '#660066' }))
       .on('pointerout', () => this.waveButton?.setStyle({ backgroundColor: '#440044' }));
 
+    this.bossTestButton = this.add.text(centerX - 100, centerY + 20, 'BOSS TEST', {
+      fontSize: '20px',
+      color: '#ff6666',
+      backgroundColor: '#331111',
+      padding: { x: 14, y: 6 }
+    }).setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', this.startBossTestMode, this)
+      .on('pointerover', () => this.bossTestButton?.setStyle({ backgroundColor: '#552222' }))
+      .on('pointerout', () => this.bossTestButton?.setStyle({ backgroundColor: '#331111' }));
+
     // Add wave progress button
     this.waveProgressButton = this.add.text(centerX + 100, centerY + 20, 'PROGRESS', {
       fontSize: '16px',
@@ -730,6 +772,7 @@ export class StartMenuScene extends Phaser.Scene {
 
     if (this.classicButton) { this.classicButton.destroy(); this.classicButton = undefined; }
     if (this.waveButton) { this.waveButton.destroy(); this.waveButton = undefined; }
+    if (this.bossTestButton) { this.bossTestButton.destroy(); this.bossTestButton = undefined; }
     if (this.modesBackButton) { this.modesBackButton.destroy(); this.modesBackButton = undefined; }
     if (this.waveProgressButton) { this.waveProgressButton.destroy(); this.waveProgressButton = undefined; }
     if (this.waveProgressDisplay) { this.waveProgressDisplay.destroy(); this.waveProgressDisplay = undefined; }
