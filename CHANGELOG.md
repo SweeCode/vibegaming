@@ -4,6 +4,38 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.1.0] - 2025-09-22 — Arena UI & Background changes (branch: ARENA-UI-background-changes)
+
+### Changed
+- Space theme background simplified: removed long white stick/streak elements for clearer visuals; retained small soft dots drifting subtly.
+
+### Added
+- Boss arena pillars: exactly two randomly placed pillars appear when a boss spawns.
+  - Pillars are static colliders: the player cannot move through them.
+  - Player bullets collide with pillars and are removed on impact.
+  - Boss bullets ignore pillars (no collision) to preserve boss patterns.
+  - Pillars are cleaned up when the boss ends, during wave transitions, and on full reset.
+- Placement safety: Pillars spawn within bounds, do not overlap each other, and avoid spawning on top of the player.
+
+### Implementation details (how)
+- Background cleanup: disabled creation of stick-shaped streaks by removing `createStreaks()` call in `ArenaBackground.ts` (`SpaceThemeLayer` constructor), keeping only `createFloaters()`.
+- Pillars: created in `WaveScene.ts` when spawning a boss (`spawnBoss` calls `createBossPillars`). Each pillar is a `Phaser.GameObjects.Rectangle` with a static Arcade Physics body.
+  - Collisions: added collider for `player ↔ pillars` and `player bullets ↔ pillars` (deactivates bullets on impact). No collider registered for `enemyBullets ↔ pillars` so boss bullets pass through.
+  - Lifecycle: `destroyBossPillars()` is invoked in `cleanupBoss()`, non-boss `startNextWave()` paths, and `resetGame()` to ensure pillars never linger between states.
+
+### Files changed
+- `src/game/objects/ArenaBackground.ts`
+  - `SpaceThemeLayer`: removed `createStreaks()` invocation to eliminate stick-shaped background streaks.
+- `src/game/scenes/WaveScene.ts`
+  - Added fields: `bossPillars`, `pillarPlayerCollider`, `pillarBulletCollider`.
+  - Added methods: `createBossPillars()`, `destroyBossPillars()`.
+  - Hooked into lifecycle: call `createBossPillars()` in `spawnBoss()`, and `destroyBossPillars()` in `cleanupBoss()`, `startNextWave()` (when not boss), and `resetGame()`.
+  - Collision setup: colliders for player vs pillars and player bullets vs pillars; intentionally no collider for enemy/boss bullets vs pillars.
+
+### Notes
+- Visual decorative pillars in the hell theme background remain purely aesthetic; gameplay pillars are separate colliders spawned only during boss phases.
+
+
 ### Upgrade overhaul
 - Unified skill tree rendered on a single, centered map with distinct paths (basic, defense, special, offense, mobility, hybrid)
 - Pan and zoom on the tree (drag to pan, mouse wheel to zoom); larger spacing between nodes for readability

@@ -372,7 +372,6 @@ class HellThemeLayer implements ThemeLayer {
     this.width = width;
     this.height = height;
     this.haze = this.createHeatHaze();
-    this.createPillars();
     this.createEmbers();
     this.hide();
   }

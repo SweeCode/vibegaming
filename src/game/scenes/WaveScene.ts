@@ -16,6 +16,89 @@ import { ensureGuestSessionInitialized, recordCurrentHealth, recordLastWorldVisi
 import { getPlayerColor } from '../systems/playerAppearance';
 import { ArenaBackground, ArenaTheme } from '../objects/ArenaBackground';
 
+type BossPillar = Phaser.GameObjects.Rectangle & {
+  pillarBody?: Phaser.Physics.Arcade.StaticBody;
+};
+
+const BOSS_PILLAR_MAX_HP = 10;
+
+interface WaveController {
+  getCurrentWave(): number;
+  getCurrentWaveSettings(): WaveSettings;
+  startWave(): void;
+  onEnemySpawned(): void;
+  onEnemyKilled(): void;
+  canSpawnEnemy(): boolean;
+  isWaveComplete(): boolean;
+  startBreak(): void;
+  endBreak(): void;
+  isOnBreak(): boolean;
+  getWaveProgress(): { spawned: number; killed: number; total: number };
+  reset(): void;
+}
+
+class BossOnlyWaveManager implements WaveController {
+  private currentWave = 1;
+  private breakTime = false;
+
+  getCurrentWave(): number {
+    return this.currentWave;
+  }
+
+  getCurrentWaveSettings(): WaveSettings {
+    const waveNumber = this.currentWave;
+    const bossType: 'sentinel' | 'artillery' = waveNumber % 2 === 1 ? 'sentinel' : 'artillery';
+    return {
+      waveNumber,
+      title: `Boss ${waveNumber}`,
+      enemyCount: 0,
+      spawnDelay: 0,
+      enemyTypes: { normal: 0, fast: 0, big: 0, shooter: 0, splitter: 0 },
+      breakDuration: 1500,
+      isBoss: true,
+      bossType
+    };
+  }
+
+  startWave(): void {
+    this.breakTime = false;
+  }
+
+  onEnemySpawned(): void {}
+
+  onEnemyKilled(): void {}
+
+  canSpawnEnemy(): boolean {
+    return false;
+  }
+
+  isWaveComplete(): boolean {
+    return false;
+  }
+
+  startBreak(): void {
+    this.breakTime = true;
+  }
+
+  endBreak(): void {
+    this.breakTime = false;
+    this.currentWave++;
+  }
+
+  isOnBreak(): boolean {
+    return this.breakTime;
+  }
+
+  getWaveProgress(): { spawned: number; killed: number; total: number } {
+    return { spawned: 0, killed: 0, total: 0 };
+  }
+
+  reset(): void {
+    this.currentWave = 1;
+    this.breakTime = false;
+  }
+}
+
 export class WaveScene extends Phaser.Scene {
   private player!: Player;
   private bullets!: Phaser.Physics.Arcade.Group;
@@ -24,7 +107,7 @@ export class WaveScene extends Phaser.Scene {
   private enemySpawner!: EnemySpawner;
   private gameUI!: GameUI;
   private reloadingBar!: ReloadingBar;
-  private waveManager!: WaveManager;
+  private waveManager!: WaveController;
   private upgradeManager!: UpgradeManager;
   private scoreManager!: ScoreManager;
   private boss?: Boss;
@@ -33,6 +116,10 @@ export class WaveScene extends Phaser.Scene {
   private bossAddTimer?: Phaser.Time.TimerEvent;
   private bossBulletOverlap?: Phaser.Physics.Arcade.Collider;
   private bossPlayerCollider?: Phaser.Physics.Arcade.Collider;
+  private bossPillars: BossPillar[] = [];
+  private pillarPlayerCollider?: Phaser.Physics.Arcade.Collider;
+  private pillarBulletCollider?: Phaser.Physics.Arcade.Collider;
+  private bossPillarHp: Map<BossPillar, number> = new Map();
   // Prevent multiple damage applications from a single collision/frame
   private bossHitCooldownUntil: number = 0;
   private score = 0;
@@ -55,9 +142,14 @@ export class WaveScene extends Phaser.Scene {
   private bossPreviewFlash?: Phaser.GameObjects.Graphics;
   private drone?: Drone;
   private arenaBackground?: ArenaBackground;
+  private bossOnlyMode = false;
 
   constructor() {
     super({ key: 'WaveScene' });
+  }
+
+  init(data?: { bossOnly?: boolean }) {
+    this.bossOnlyMode = !!data?.bossOnly;
   }
 
   shutdown() {
@@ -243,7 +335,7 @@ export class WaveScene extends Phaser.Scene {
   }
 
   private createWaveManager() {
-    this.waveManager = new WaveManager();
+    this.waveManager = this.bossOnlyMode ? new BossOnlyWaveManager() : new WaveManager();
     // Update progress display now that wave manager is initialized
     this.updateProgressDisplay();
   }
@@ -252,6 +344,188 @@ export class WaveScene extends Phaser.Scene {
     this.physics.add.collider(this.bullets, this.enemies, this.handleBulletEnemyCollision, undefined, this);
     this.physics.add.collider(this.player, this.enemies, this.handlePlayerEnemyCollision, undefined, this);
     this.physics.add.overlap(this.player, this.enemyBullets, (playerObj, bulletObj) => this.handlePlayerHitByEnemyBullet(playerObj as Phaser.GameObjects.GameObject, bulletObj as Phaser.GameObjects.GameObject), undefined, this);
+  }
+
+  private createBossPillars() {
+    this.destroyBossPillars();
+    const w = this.scale.width;
+    const h = this.scale.height;
+    const baseWidth = 28;
+    const baseHeight = 120;
+    const pillarWidth = Math.round(baseWidth * 1.2);
+    const pillarHeight = Math.round(baseHeight * 2);
+    const halfWidth = pillarWidth / 2;
+    const halfHeight = pillarHeight / 2;
+    const marginX = Math.ceil(halfWidth + 40);
+    const marginY = Math.ceil(halfHeight + 40);
+    const minDistance = Math.max(pillarHeight, pillarWidth) * 1.2;
+    const minDistanceSq = minDistance * minDistance;
+
+    const generatePos = (): { x: number; y: number } => ({
+      x: Phaser.Math.Between(marginX, Math.max(marginX, w - marginX)),
+      y: Phaser.Math.Between(marginY, Math.max(marginY, h - marginY))
+    });
+
+    const isTooClose = (a: { x: number; y: number }, b: { x: number; y: number }): boolean => {
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      return dx * dx + dy * dy < minDistanceSq;
+    };
+
+    const avoidPlayer = (p: { x: number; y: number }) => {
+      const dx = p.x - this.player.x;
+      const dy = p.y - this.player.y;
+      return dx * dx + dy * dy < 220 * 220;
+    };
+
+    // Pick two positions with retries
+    let p1 = generatePos();
+    let attempts = 0;
+    while ((avoidPlayer(p1) || p1.x <= marginX || p1.x >= w - marginX) && attempts++ < 30) p1 = generatePos();
+    let p2 = generatePos();
+    attempts = 0;
+    while ((isTooClose(p1, p2) || avoidPlayer(p2)) && attempts++ < 40) p2 = generatePos();
+
+    const makePillar = (pos: { x: number; y: number }): BossPillar => {
+      const rect = this.add.rectangle(pos.x, pos.y, pillarWidth, pillarHeight, 0xffffff, 0.18)
+        .setStrokeStyle(2, 0xffffff, 0.55)
+        .setDepth(500)
+        .setScrollFactor(0) as BossPillar;
+      this.physics.add.existing(rect, true);
+      rect.pillarBody = rect.body as Phaser.Physics.Arcade.StaticBody;
+      if (rect.pillarBody) {
+        (rect.pillarBody as unknown as { bossPillar?: BossPillar }).bossPillar = rect;
+      }
+      rect.setAngle(Phaser.Math.FloatBetween(-6, 6));
+      rect.pillarBody.updateFromGameObject();
+      this.bossPillarHp.set(rect, BOSS_PILLAR_MAX_HP);
+      this.updateBossPillarVisual(rect);
+      return rect;
+    };
+
+    const r1 = makePillar(p1);
+    const r2 = makePillar(p2);
+    this.bossPillars = [r1, r2];
+    this.setupBossPillarColliders();
+
+    // Boss bullets must pass through pillars: no collider/overlap registered for enemyBullets vs pillars
+  }
+
+  private destroyBossPillars() {
+    while (this.bossPillars.length > 0) {
+      this.removeBossPillar(this.bossPillars[0]);
+    }
+    this.bossPillarHp.clear();
+    this.setupBossPillarColliders();
+  }
+
+  private updateBossPillarVisual(pillar: BossPillar) {
+    const hp = this.bossPillarHp.get(pillar) ?? BOSS_PILLAR_MAX_HP;
+    const ratio = Phaser.Math.Clamp(hp / BOSS_PILLAR_MAX_HP, 0, 1);
+    pillar.setAlpha(0.14 + 0.26 * ratio);
+    pillar.setStrokeStyle(2, 0xffffff, 0.25 + 0.5 * ratio);
+  }
+
+  private damageBossPillar(pillar: BossPillar, bulletSprite: Phaser.GameObjects.Sprite & { getData?: (key: string) => unknown }) {
+    if (!pillar.scene) return;
+    // Collisions can fire before bookkeeping finishes initializing, so fall back to full HP
+    const existingHp = this.bossPillarHp.get(pillar);
+    const currentHp = existingHp ?? BOSS_PILLAR_MAX_HP;
+    if (currentHp <= 0) return;
+    const updatedHp = Math.max(0, currentHp - 1);
+    this.bossPillarHp.set(pillar, updatedHp);
+    if (updatedHp <= 0) {
+      const breakX = pillar.x;
+      const breakY = pillar.y;
+      this.removeBossPillar(pillar);
+      this.spawnPillarBreakEffect(breakX, breakY);
+    } else {
+      this.updateBossPillarVisual(pillar);
+    }
+  }
+
+  private spawnPillarBreakEffect(x: number, y: number) {
+    const flash = this.add.circle(x, y, 12, 0xffffff, 0.5).setDepth(600).setScrollFactor(0);
+    this.tweens.add({
+      targets: flash,
+      radius: { from: 12, to: 48 },
+      alpha: { from: 0.5, to: 0 },
+      duration: 180,
+      onComplete: () => flash.destroy()
+    });
+  }
+
+  private removeBossPillar(pillar: BossPillar) {
+    const index = this.bossPillars.indexOf(pillar);
+    if (index !== -1) {
+      this.bossPillars.splice(index, 1);
+    }
+    if (pillar.active) pillar.setActive(false);
+    if (pillar.visible) pillar.setVisible(false);
+    if (pillar.pillarBody) {
+      pillar.pillarBody.destroy();
+      pillar.pillarBody = undefined;
+    }
+    pillar.destroy();
+    this.bossPillarHp.delete(pillar);
+    this.setupBossPillarColliders();
+  }
+
+  private getPlayerBulletDamage(bulletSprite: Phaser.GameObjects.Sprite & { getData?: (key: string) => unknown }): number {
+    const playerStats = this.upgradeManager.getPlayerStats();
+    const fromDrone = bulletSprite.getData?.('fromDrone') === true;
+    const customDroneDmg = bulletSprite.getData?.('droneDamage');
+    if (fromDrone) {
+      const base = typeof customDroneDmg === 'number' ? customDroneDmg : playerStats.bulletDamage * 0.5;
+      return Math.max(1, Math.ceil(base));
+    }
+    return Math.max(1, Math.ceil(playerStats.bulletDamage));
+  }
+
+  private resolveBossPillar(target: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.StaticBody | undefined): BossPillar | undefined {
+    if (!target) return undefined;
+    if (target instanceof Phaser.GameObjects.Rectangle) {
+      return target as BossPillar;
+    }
+    const body = target as Phaser.Physics.Arcade.StaticBody & { gameObject?: Phaser.GameObjects.GameObject; bossPillar?: BossPillar };
+    if (body.bossPillar) return body.bossPillar;
+    const go = body.gameObject;
+    if (go instanceof Phaser.GameObjects.Rectangle) {
+      return go as BossPillar;
+    }
+    return undefined;
+  }
+
+  private setupBossPillarColliders() {
+    this.pillarPlayerCollider?.destroy();
+    this.pillarPlayerCollider = undefined;
+    this.pillarBulletCollider?.destroy();
+    this.pillarBulletCollider = undefined;
+
+    if (!this.bossPillars.length) return;
+
+    this.pillarPlayerCollider = this.physics.add.collider(this.player, this.bossPillars);
+    this.pillarBulletCollider = this.physics.add.collider(
+      this.bullets,
+      this.bossPillars,
+      this.handlePillarBulletCollision as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
+      undefined,
+      this
+    );
+  }
+
+  private handlePillarBulletCollision(bulletObj: Phaser.GameObjects.GameObject, target: Phaser.GameObjects.GameObject | Phaser.Physics.Arcade.StaticBody) {
+    const bulletSprite = bulletObj as Phaser.GameObjects.Sprite & { body?: Phaser.Physics.Arcade.Body, ttlEvent?: Phaser.Time.TimerEvent };
+    const pillar = this.resolveBossPillar(target);
+    if (!pillar || !bulletSprite.active) return;
+    if (bulletSprite.ttlEvent) { bulletSprite.ttlEvent.remove(false); bulletSprite.ttlEvent = undefined; }
+    if (bulletSprite.body) bulletSprite.body.velocity.set(0, 0);
+    bulletSprite.setActive(false).setVisible(false);
+    (this.bullets as Phaser.Physics.Arcade.Group).killAndHide(bulletSprite);
+    if (bulletSprite.body) {
+      bulletSprite.body.enable = false;
+    }
+    this.damageBossPillar(pillar, bulletSprite);
   }
 
   private setupMouseInput() {
@@ -368,6 +642,8 @@ export class WaveScene extends Phaser.Scene {
       this.showWaveNotification();
       this.setupSpawnTimer();
     }
+    // Ensure any lingering pillars are removed when not in boss state
+    if (!settings.isBoss) this.destroyBossPillars();
     this.hideBreakNotification();
   }
 
@@ -564,6 +840,8 @@ export class WaveScene extends Phaser.Scene {
     this.bossPlayerCollider = this.physics.add.collider(this.player, this.boss, this.handlePlayerBossCollision as unknown as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback, undefined, this);
     // Ensure the boss body is immovable relative to player collision too
     ;(this.boss.body as Phaser.Physics.Arcade.Body).immovable = true
+    // Create collidable pillars for boss arena
+    this.createBossPillars();
     this.createBossHealthUI();
     this.startBossAdds();
   }
@@ -710,6 +988,8 @@ export class WaveScene extends Phaser.Scene {
     if (this.boss && this.boss.active) {
       (this.boss as Boss).destroy();
     }
+    // Remove boss pillars and their colliders
+    this.destroyBossPillars();
     this.boss = undefined;
     this.setDefaultArenaTheme();
   }
@@ -850,10 +1130,7 @@ export class WaveScene extends Phaser.Scene {
       }
       b.setActive(false).setVisible(false);
     }
-    const playerStats = this.upgradeManager.getPlayerStats();
-    const fromDrone = (bulletObj as unknown as { getData?: (k: string) => unknown }).getData?.('fromDrone') === true;
-    const customDroneDmg = (bulletObj as unknown as { getData?: (k: string) => unknown }).getData?.('droneDamage');
-    const dmg = fromDrone ? Math.max(1, Math.ceil((typeof customDroneDmg === 'number' ? customDroneDmg : playerStats.bulletDamage * 0.5))) : playerStats.bulletDamage;
+    const dmg = this.getPlayerBulletDamage(bulletObj as Phaser.GameObjects.Sprite & { getData?: (key: string) => unknown });
     const isDead = enemyObj.takeDamage(dmg);
     if (isDead) {
       // Only add to current wave score if the wave hasn't been completed yet
@@ -950,11 +1227,12 @@ export class WaveScene extends Phaser.Scene {
   }
 
   private handleGameOver() {
+    if (this.gameOver) return;
+    this.gameOver = true;
     this.physics.pause();
     if (this.spawnTimer) this.spawnTimer.paused = true;
     if (this.breakTimer) this.breakTimer.paused = true;
     this.player.setTint(0xff0000);
-    this.gameOver = true;
     this.gameUI.showGameOver(
       () => this.resetGame(),
       () => this.scene.start('StartMenuScene'),
@@ -996,6 +1274,7 @@ export class WaveScene extends Phaser.Scene {
     const bullet = this.bullets.get(spawnX, spawnY) as (Phaser.GameObjects.Sprite & { body?: Phaser.Physics.Arcade.Body, ttlEvent?: Phaser.Time.TimerEvent, pierceLeft?: number, bounceLeft?: number }) | null;
     if (bullet) {
       bullet.setActive(true).setVisible(true);
+      if (bullet.body) bullet.body.enable = true;
       const playerStats = this.upgradeManager.getPlayerStats();
       // Set velocity directly to ensure consistent launch even for close clicks
       if (bullet.body) {
@@ -1036,6 +1315,7 @@ export class WaveScene extends Phaser.Scene {
     const bullet = this.bullets.get(x, y) as (Phaser.GameObjects.Sprite & { body?: Phaser.Physics.Arcade.Body, ttlEvent?: Phaser.Time.TimerEvent, pierceLeft?: number, bounceLeft?: number, fromDrone?: boolean }) | null;
     if (!bullet) return;
     bullet.setActive(true).setVisible(true);
+    if (bullet.body) bullet.body.enable = true;
     // Tag as drone-origin using Phaser's Data Manager if available
     const asObj = bullet as unknown as { setData?: (k: string, v: unknown) => void }
     if (typeof asObj.setData === 'function') {
@@ -1240,6 +1520,8 @@ export class WaveScene extends Phaser.Scene {
     }
     // Fully cleanup any existing boss
     this.cleanupBoss();
+    // Also ensure pillars are gone
+    this.destroyBossPillars();
 
     this.physics.resume();
     this.startFirstWave();

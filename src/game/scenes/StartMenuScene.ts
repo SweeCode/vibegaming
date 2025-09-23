@@ -22,6 +22,7 @@ export class StartMenuScene extends Phaser.Scene {
   private backButton?: Phaser.GameObjects.Text;
   private classicButton?: Phaser.GameObjects.Text;
   private waveButton?: Phaser.GameObjects.Text;
+  private bossTestButton?: Phaser.GameObjects.Text;
   private modesBackButton?: Phaser.GameObjects.Text;
   private waveProgressButton?: Phaser.GameObjects.Text;
   private waveProgressDisplay?: Phaser.GameObjects.Text;
@@ -245,6 +246,10 @@ export class StartMenuScene extends Phaser.Scene {
 
   private startWaveMode() {
     this.scene.start('WaveScene');
+  }
+
+  private startBossTestMode() {
+    this.scene.start('WaveScene', { bossOnly: true });
   }
 
   private showOptions() {
@@ -719,6 +724,17 @@ export class StartMenuScene extends Phaser.Scene {
       .on('pointerover', () => this.waveButton?.setStyle({ backgroundColor: '#660066' }))
       .on('pointerout', () => this.waveButton?.setStyle({ backgroundColor: '#440044' }));
 
+    this.bossTestButton = this.add.text(centerX - 100, centerY + 20, 'BOSS TEST', {
+      fontSize: '20px',
+      color: '#ff6666',
+      backgroundColor: '#331111',
+      padding: { x: 14, y: 6 }
+    }).setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', this.startBossTestMode, this)
+      .on('pointerover', () => this.bossTestButton?.setStyle({ backgroundColor: '#552222' }))
+      .on('pointerout', () => this.bossTestButton?.setStyle({ backgroundColor: '#331111' }));
+
     // Add wave progress button
     this.waveProgressButton = this.add.text(centerX + 100, centerY + 20, 'PROGRESS', {
       fontSize: '16px',
@@ -756,6 +772,7 @@ export class StartMenuScene extends Phaser.Scene {
 
     if (this.classicButton) { this.classicButton.destroy(); this.classicButton = undefined; }
     if (this.waveButton) { this.waveButton.destroy(); this.waveButton = undefined; }
+    if (this.bossTestButton) { this.bossTestButton.destroy(); this.bossTestButton = undefined; }
     if (this.modesBackButton) { this.modesBackButton.destroy(); this.modesBackButton = undefined; }
     if (this.waveProgressButton) { this.waveProgressButton.destroy(); this.waveProgressButton = undefined; }
     if (this.waveProgressDisplay) { this.waveProgressDisplay.destroy(); this.waveProgressDisplay = undefined; }
