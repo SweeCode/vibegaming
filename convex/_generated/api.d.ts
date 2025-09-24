@@ -13,6 +13,7 @@ import type {
   FilterApi,
   FunctionReference,
 } from "convex/server";
+import type * as achievements from "../achievements.js";
 import type * as guestSessions from "../guestSessions.js";
 import type * as leaderboard from "../leaderboard.js";
 import type * as pets from "../pets.js";
@@ -30,6 +31,7 @@ import type * as waveProgress from "../waveProgress.js";
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  achievements: typeof achievements;
   guestSessions: typeof guestSessions;
   leaderboard: typeof leaderboard;
   pets: typeof pets;

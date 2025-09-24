@@ -142,6 +142,9 @@ export class ShooterEnemy extends Enemy {
     bullet.setActive(true).setVisible(true);
     bullet.setCircle(4, 0, 0);
     this.scene.physics.world.enable(bullet);
+    bullet.setCollideWorldBounds(true);
+    const body = bullet.body as Phaser.Physics.Arcade.Body | undefined;
+    if (body) body.onWorldBounds = true;
     this.scene.physics.moveTo(bullet, this.target.x, this.target.y, GAME_SETTINGS.enemies.shooter.bulletSpeed);
   }
 
@@ -397,6 +400,9 @@ export class SentinelBoss extends Boss {
           bullet.setActive(true).setVisible(true)
           bullet.setCircle(4, 0, 0)
           this.scene.physics.world.enable(bullet)
+          bullet.setCollideWorldBounds(true)
+          const body = bullet.body as Phaser.Physics.Arcade.Body | undefined
+          if (body) body.onWorldBounds = true
           ;(bullet as unknown as { setData?: (key: string, value: unknown) => void }).setData?.('fromBoss', true)
           bullet.setVelocity(Math.cos(angle) * 240, Math.sin(angle) * 240)
         }
@@ -435,6 +441,9 @@ export class ArtilleryBoss extends Boss {
       bullet.setActive(true).setVisible(true)
       bullet.setCircle(4, 0, 0)
       this.scene.physics.world.enable(bullet)
+      bullet.setCollideWorldBounds(true)
+      const body = bullet.body as Phaser.Physics.Arcade.Body | undefined
+      if (body) body.onWorldBounds = true
       ;(bullet as unknown as { setData?: (key: string, value: unknown) => void }).setData?.('fromBoss', true)
       bullet.setVelocity(Math.cos(angle) * 180, Math.sin(angle) * 180)
     }

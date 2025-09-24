@@ -22,7 +22,11 @@ Level 3(No Shots, No Problem): Make it a limited amound of reload rounds, and fo
 
 Level 4 (Glass Cannon): Your HP is set to 1 and you have to complete wave 1-10 Without dying. This is supposed to be a dodge test.
 
-
+Level 5 – “Speed Demon”
+Mechanic: Player’s movement speed is doubled, but recoil pushes them more too (harder to control).
+Enemies: Small waves of regular mobs, capped by a tanky mini-boss.
+Twist: The high speed makes positioning harder and accuracy tougher.
+Reward: Achievement: Too Fast to Fail.
 
 
 

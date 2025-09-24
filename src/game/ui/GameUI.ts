@@ -100,6 +100,11 @@ export class GameUI {
     this.ammoText.setText(`Ammo: ${ammo}`);
   }
 
+  // Optional richer ammo UI for challenge modes
+  updateAmmoDetailed(current: number, maxPerMag: number, totalRemaining: number) {
+    this.ammoText.setText(`Ammo: ${current}/${maxPerMag}  (Total: ${totalRemaining})`);
+  }
+
   updateTimer(seconds: number) {
     const formattedTime = this.formatTime(seconds);
     this.timerText.setText(`Time: ${formattedTime}`);
