@@ -1,5 +1,3 @@
-import * as Phaser from 'phaser';
-
 export type AchievementId =
   | 'first_blood'
   | 'survivor_5m'
@@ -118,7 +116,7 @@ export class AchievementsManager {
   private persist() {
     try {
       if (typeof window === 'undefined') return;
-      const obj: Record<AchievementId, { unlockedAt?: number }> = {} as any;
+      const obj = {} as Record<AchievementId, { unlockedAt?: number }>;
       for (const [id, st] of this.state) obj[id] = { unlockedAt: st.unlockedAt };
       localStorage.setItem(this.storageKey, JSON.stringify(obj));
     } catch {}
@@ -135,5 +133,4 @@ export const AchievementsAPI = {
   isUnlocked: (id: AchievementId) => AchievementsManager.getInstance().isUnlocked(id),
   resetAll: () => AchievementsManager.getInstance().resetAll()
 };
-
 

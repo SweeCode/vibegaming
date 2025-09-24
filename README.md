@@ -42,6 +42,7 @@ cd space-shapes
 
 # Install dependencies
 npm install
+# (scripts must run so Tailwind can download its lightningcss binary)
 
 # Start development server
 npm run dev

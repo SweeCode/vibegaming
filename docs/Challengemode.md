@@ -30,5 +30,8 @@ Reward: Achievement: Too Fast to Fail.
 
 
 
+When you unlock a new achievement, the achievement menus should light up, indicating it and when you click on it it should be a small reward or congratulations and unlocking the achievement and then it goes back to normal.
+
+
 
 

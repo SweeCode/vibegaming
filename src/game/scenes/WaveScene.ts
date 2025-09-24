@@ -7,7 +7,7 @@ import { addSnacks, getSnacks } from '../systems/petUpgrades';
 import { getBulletSpeedMultiplier, getBulletSizeMultiplier } from '../systems/petUpgrades';
 import { GameUI } from '../ui/GameUI';
 import { ReloadingBar } from '../ui/ReloadingBar';
-import { WaveManager } from '../systems/WaveManager';
+import { WaveManager, type WaveSettings } from '../systems/WaveManager';
 import { UpgradeManager, type PlayerStats } from '../systems/UpgradeManager';
 import { ScoreManager } from '../systems/ScoreManager';
 import { Drone } from '../objects/Drone';
@@ -442,6 +442,7 @@ export class WaveScene extends Phaser.Scene {
   }
 
   private damageBossPillar(pillar: BossPillar, bulletSprite: Phaser.GameObjects.Sprite & { getData?: (key: string) => unknown }) {
+    void bulletSprite;
     if (!pillar.scene) return;
     // Collisions can fire before bookkeeping finishes initializing, so fall back to full HP
     const existingHp = this.bossPillarHp.get(pillar);
@@ -725,7 +726,7 @@ export class WaveScene extends Phaser.Scene {
     const centerX = this.scale.width / 2;
     const centerY = this.scale.height / 2;
     const bossName = type === 'artillery' ? 'ARTILLERY' : 'SENTINEL';
-    const message = `WARNING: ${bossName} BOSS INCOMING`;
+    const message = `WARNING: WAVE ${waveNum} ${bossName} INCOMING`;
 
     // Create initial boss preview flash
     this.createBossPreviewFlash(type);
@@ -1131,8 +1132,8 @@ export class WaveScene extends Phaser.Scene {
       speed_demon: 'Too Fast to Fail. You tamed the speed.'
     };
     const msg = messageMap[id] || 'Challenge Complete!';
-    const title = this.add.text(cx, cy - 40, 'CONGRATULATIONS!', { fontSize: '56px', color: '#00ffaa', fontStyle: 'bold' }).setOrigin(0.5);
-    const subtitle = this.add.text(cx, cy + 10, msg, { fontSize: '24px', color: '#ffffff' }).setOrigin(0.5);
+    this.add.text(cx, cy - 40, 'CONGRATULATIONS!', { fontSize: '56px', color: '#00ffaa', fontStyle: 'bold' }).setOrigin(0.5);
+    this.add.text(cx, cy + 10, msg, { fontSize: '24px', color: '#ffffff' }).setOrigin(0.5);
     const button = this.add.text(cx, cy + 80, 'CONTINUE', { fontSize: '28px', color: '#111827', backgroundColor: '#22d3ee', padding: { x: 24, y: 10 } }).setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {

@@ -51,6 +51,20 @@ export class ChallengeScene extends Phaser.Scene {
   // Pillars (simple static obstacles for Boss Rush)
   private pillars: Array<Phaser.GameObjects.Rectangle & { body?: Phaser.Physics.Arcade.StaticBody } > = [];
 
+  private readonly bossOverlapCallback: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (objA, objB) => {
+    const first = this.getColliderGameObject(objA);
+    const second = this.getColliderGameObject(objB);
+    if (!first || !second) return;
+    this.onBulletHitsBoss(first, second);
+  };
+
+  private readonly playerBossCollisionCallback: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (playerTarget, bossTarget) => {
+    const player = this.getColliderGameObject(playerTarget);
+    const boss = this.getColliderGameObject(bossTarget);
+    if (!player) return;
+    this.handlePlayerBossCollision(player, boss);
+  };
+
   constructor() {
     super({ key: 'ChallengeScene' });
   }
@@ -216,10 +230,20 @@ export class ChallengeScene extends Phaser.Scene {
     this.physics.add.collider(
       this.bullets,
       this.enemies,
-      (obj1: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile,
-       obj2: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | Phaser.Tilemaps.Tile) => {
-        const bulletGo = (obj1 as unknown as { gameObject?: Phaser.GameObjects.GameObject }).gameObject || (obj1 as unknown as Phaser.GameObjects.GameObject);
-        const enemyGo = (obj2 as unknown as { gameObject?: Phaser.GameObjects.GameObject }).gameObject || (obj2 as unknown as Phaser.GameObjects.GameObject);
+      (
+        obj1:
+          | Phaser.Types.Physics.Arcade.GameObjectWithBody
+          | Phaser.Physics.Arcade.Body
+          | Phaser.Physics.Arcade.StaticBody
+          | Phaser.Tilemaps.Tile,
+        obj2:
+          | Phaser.Types.Physics.Arcade.GameObjectWithBody
+          | Phaser.Physics.Arcade.Body
+          | Phaser.Physics.Arcade.StaticBody
+          | Phaser.Tilemaps.Tile
+      ) => {
+        const bulletGo = this.getColliderGameObject(obj1);
+        const enemyGo = this.getColliderGameObject(obj2);
         if (!bulletGo || !enemyGo) return;
         this.onBulletHitsEnemy(
           bulletGo as Phaser.GameObjects.Sprite & { body?: Phaser.Physics.Arcade.Body; ttlEvent?: Phaser.Time.TimerEvent },
@@ -229,6 +253,25 @@ export class ChallengeScene extends Phaser.Scene {
     );
     this.physics.add.collider(this.player, this.enemies, () => this.handlePlayerEnemyCollision());
     this.physics.add.overlap(this.player, this.enemyBullets, (p, b) => this.handlePlayerHitByEnemyBullet(p as Phaser.GameObjects.GameObject, b as Phaser.GameObjects.GameObject));
+  }
+
+  private getColliderGameObject(
+    target:
+      | Phaser.Types.Physics.Arcade.GameObjectWithBody
+      | Phaser.Physics.Arcade.Body
+      | Phaser.Physics.Arcade.StaticBody
+      | Phaser.Tilemaps.Tile
+      | undefined
+  ): Phaser.GameObjects.GameObject | undefined {
+    if (!target) return undefined;
+    if (target instanceof Phaser.GameObjects.GameObject) {
+      return target;
+    }
+    if ('gameObject' in target) {
+      const go = (target as { gameObject?: Phaser.GameObjects.GameObject }).gameObject;
+      if (go instanceof Phaser.GameObjects.GameObject) return go;
+    }
+    return undefined;
   }
 
   private handlePlayerEnemyCollision() {
@@ -249,7 +292,9 @@ export class ChallengeScene extends Phaser.Scene {
     if (isDead) this.fail();
   }
 
-  private handlePlayerBossCollision(_player: Phaser.GameObjects.GameObject, _boss?: Phaser.GameObjects.GameObject) {
+  private handlePlayerBossCollision(player: Phaser.GameObjects.GameObject, boss?: Phaser.GameObjects.GameObject) {
+    void player;
+    void boss;
     // Similar to WaveScene: boss contact deals heavier damage
     const scale = 1.4; // tuned heavier than enemy collision
     const dmg = Math.floor(GAME_SETTINGS.player.damagePerHit * 2 * scale);
@@ -357,9 +402,10 @@ export class ChallengeScene extends Phaser.Scene {
       this.enemyBullets = this.enemyBullets || this.physics.add.group({ defaultKey: 'enemy_bullet', maxSize: 400 });
       this.spawnPillars(4);
       this.createBossHealthUI();
-      this.physics.add.overlap(this.bullets, [this.bossA, this.bossB], (objA: Phaser.GameObjects.GameObject, objB: Phaser.GameObjects.GameObject) => this.onBulletHitsBoss(objA, objB));
+      const bosses = [this.bossA, this.bossB].filter((boss): boss is Boss => !!boss);
+      this.physics.add.overlap(this.bullets, bosses, this.bossOverlapCallback);
       // Player vs enemyBullets overlap is already registered in setupCollisions().
-      this.physics.add.collider(this.player, [this.bossA, this.bossB], (p, b) => this.handlePlayerBossCollision(p as Phaser.GameObjects.GameObject, b as Phaser.GameObjects.GameObject));
+      this.physics.add.collider(this.player, bosses, this.playerBossCollisionCallback);
     });
     this.bossIntroTimers.push(t);
   }
@@ -369,7 +415,10 @@ export class ChallengeScene extends Phaser.Scene {
     const x = this.scale.width / 2;
     const y = this.scale.height / 2 - 150;
     this.bossA = new SentinelBoss(this, x, y, this.player);
-    this.physics.add.overlap(this.bullets, this.bossA, (objA, objB) => this.onBulletHitsBoss(objA as Phaser.GameObjects.GameObject, objB as Phaser.GameObjects.GameObject));
+    const boss = this.bossA;
+    if (boss) {
+      this.physics.add.overlap(this.bullets, boss, this.bossOverlapCallback);
+    }
     // Periodically spawn fast enemies
     this.time.addEvent({ delay: 900, loop: true, callback: () => {
       for (let i = 0; i < 3; i++) {
@@ -454,8 +503,8 @@ export class ChallengeScene extends Phaser.Scene {
       no_shots: 'Accuracy on point. Ammo discipline paid off.'
     };
     const msg = msgMap[this.level] || 'Challenge Complete!';
-    const title = this.add.text(cx, cy - 40, 'CONGRATULATIONS!', { fontSize: '56px', color: '#00ffaa', fontStyle: 'bold' }).setOrigin(0.5);
-    const subtitle = this.add.text(cx, cy + 10, msg, { fontSize: '24px', color: '#ffffff' }).setOrigin(0.5);
+    this.add.text(cx, cy - 40, 'CONGRATULATIONS!', { fontSize: '56px', color: '#00ffaa', fontStyle: 'bold' }).setOrigin(0.5);
+    this.add.text(cx, cy + 10, msg, { fontSize: '24px', color: '#ffffff' }).setOrigin(0.5);
     const button = this.add.text(cx, cy + 80, 'CONTINUE', { fontSize: '28px', color: '#111827', backgroundColor: '#22d3ee', padding: { x: 24, y: 10 } }).setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => { try { window.location.href = '/challenge'; } catch { this.scene.start('StartMenuScene'); } })
@@ -527,16 +576,26 @@ export class ChallengeScene extends Phaser.Scene {
         this.enemyBullets,
         this.pillars,
         (
-          objA: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody,
-          objB: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody
+          objA:
+            | Phaser.Types.Physics.Arcade.GameObjectWithBody
+            | Phaser.Physics.Arcade.Body
+            | Phaser.Physics.Arcade.StaticBody
+            | Phaser.Tilemaps.Tile,
+          objB:
+            | Phaser.Types.Physics.Arcade.GameObjectWithBody
+            | Phaser.Physics.Arcade.Body
+            | Phaser.Physics.Arcade.StaticBody
+            | Phaser.Tilemaps.Tile
         ) => {
-          const goA = (objA as unknown as { gameObject?: Phaser.GameObjects.GameObject }).gameObject || (objA as unknown as Phaser.GameObjects.GameObject);
-          const goB = (objB as unknown as { gameObject?: Phaser.GameObjects.GameObject }).gameObject || (objB as unknown as Phaser.GameObjects.GameObject);
-          const bullet = (this.enemyBullets.contains(goA) ? goA : this.enemyBullets.contains(goB) ? goB : undefined) as
+          const goA = this.getColliderGameObject(objA);
+          const goB = this.getColliderGameObject(objB);
+          const bulletCandidateA = goA && this.enemyBullets.contains(goA) ? goA : undefined;
+          const bulletCandidateB = goB && this.enemyBullets.contains(goB) ? goB : undefined;
+          const bullet = (bulletCandidateA ?? bulletCandidateB) as
             (Phaser.GameObjects.Sprite & { body?: Phaser.Physics.Arcade.Body }) | undefined;
           if (!bullet || !bullet.active) return;
-          const body = bullet.body as Phaser.Physics.Arcade.Body | undefined;
-          if (body && typeof (body as any).setVelocity === 'function') body.setVelocity(0, 0);
+          const body = bullet.body as Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | undefined;
+          if (body instanceof Phaser.Physics.Arcade.Body) body.setVelocity(0, 0);
           bullet.setActive(false).setVisible(false);
         }
       );
@@ -544,18 +603,28 @@ export class ChallengeScene extends Phaser.Scene {
         this.bullets,
         this.pillars,
         (
-          objA: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody,
-          objB: Phaser.Types.Physics.Arcade.GameObjectWithBody | Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody
+          objA:
+            | Phaser.Types.Physics.Arcade.GameObjectWithBody
+            | Phaser.Physics.Arcade.Body
+            | Phaser.Physics.Arcade.StaticBody
+            | Phaser.Tilemaps.Tile,
+          objB:
+            | Phaser.Types.Physics.Arcade.GameObjectWithBody
+            | Phaser.Physics.Arcade.Body
+            | Phaser.Physics.Arcade.StaticBody
+            | Phaser.Tilemaps.Tile
         ) => {
           // Extract the bullet GameObject regardless of arg order
-          const goA = (objA as unknown as { gameObject?: Phaser.GameObjects.GameObject }).gameObject || (objA as unknown as Phaser.GameObjects.GameObject);
-          const goB = (objB as unknown as { gameObject?: Phaser.GameObjects.GameObject }).gameObject || (objB as unknown as Phaser.GameObjects.GameObject);
-          const bullet = (this.bullets.contains(goA) ? goA : this.bullets.contains(goB) ? goB : undefined) as
+          const goA = this.getColliderGameObject(objA);
+          const goB = this.getColliderGameObject(objB);
+          const bulletCandidateA = goA && this.bullets.contains(goA) ? goA : undefined;
+          const bulletCandidateB = goB && this.bullets.contains(goB) ? goB : undefined;
+          const bullet = (bulletCandidateA ?? bulletCandidateB) as
             (Phaser.GameObjects.Sprite & { body?: Phaser.Physics.Arcade.Body; ttlEvent?: Phaser.Time.TimerEvent }) | undefined;
           if (!bullet || !bullet.active) return;
           if (bullet.ttlEvent) { bullet.ttlEvent.remove(false); bullet.ttlEvent = undefined; }
-          const body2 = bullet.body as Phaser.Physics.Arcade.Body | undefined;
-          if (body2 && typeof (body2 as any).setVelocity === 'function') body2.setVelocity(0, 0);
+          const body = bullet.body as Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | undefined;
+          if (body instanceof Phaser.Physics.Arcade.Body) body.setVelocity(0, 0);
           bullet.setActive(false).setVisible(false);
         }
       );
@@ -631,5 +700,3 @@ export class ChallengeScene extends Phaser.Scene {
     ensureRect('boss_artillery', 84, 84, 0x33ffaa);
   }
 }
-
-

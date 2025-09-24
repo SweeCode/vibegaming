@@ -164,6 +164,9 @@ export class GameUI {
   }
 
   updateWaveProgress(completedWaves: number, highestWave: number, currentWave?: number) {
+    void completedWaves;
+    void highestWave;
+    void currentWave;
     if (this.waveProgressText) {
       this.waveProgressText.setText('');
       this.waveProgressText.setVisible(false);

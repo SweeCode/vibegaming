@@ -130,7 +130,6 @@ export default function Challenge() {
         {nodes.map(({ c, x, y }) => {
           const completed = isCompleted(c);
           const unlocked = isUnlocked(c);
-          const locked = !unlocked;
           const size = 72;
           const glow = completed ? '0 0 22px rgba(167,139,250,0.95), 0 0 46px rgba(167,139,250,0.6)' : unlocked ? '0 0 14px rgba(124,58,237,0.5)' : 'none';
           const bg = completed ? 'linear-gradient(180deg, #121026, #0a0718)' : unlocked ? 'linear-gradient(180deg, #0e091b, #0a0e18)' : 'linear-gradient(180deg, #0a0f1a, #070b12)';
@@ -197,5 +196,4 @@ export default function Challenge() {
     </main>
   );
 }
-
 
