@@ -24,6 +24,7 @@ export class StartMenuScene extends Phaser.Scene {
   private classicButton?: Phaser.GameObjects.Text;
   private waveButton?: Phaser.GameObjects.Text;
   private bossTestButton?: Phaser.GameObjects.Text;
+  private challengeButton?: Phaser.GameObjects.Text;
   private modesBackButton?: Phaser.GameObjects.Text;
   private waveProgressButton?: Phaser.GameObjects.Text;
   private waveProgressDisplay?: Phaser.GameObjects.Text;
@@ -165,6 +166,12 @@ export class StartMenuScene extends Phaser.Scene {
       const url = new URL(window.location.href);
       if (url.searchParams.get('show') === 'achievements') {
         this.scene.start('AchievementsScene');
+        return;
+      }
+      // Auto-start challenge level if on /challenge/play
+      if (url.pathname.startsWith('/challenge/play')) {
+        const level = (url.searchParams.get('level') || 'boss_rush') as 'boss_rush' | 'split_attention' | 'no_shots' | 'glass_cannon' | 'speed_demon';
+        this.scene.start('ChallengeScene', { level });
         return;
       }
     } catch {}
@@ -728,40 +735,13 @@ export class StartMenuScene extends Phaser.Scene {
 
 
 
-    this.classicButton = this.add.text(centerX - 100, centerY - 20, 'ENDLESS', {
-      fontSize: '28px',
-      color: '#00ff00',
-      backgroundColor: '#004400',
-      padding: { x: 20, y: 10 }
-    }).setOrigin(0.5)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', this.startGame, this)
-      .on('pointerover', () => this.classicButton?.setStyle({ backgroundColor: '#006600' }))
-      .on('pointerout', () => this.classicButton?.setStyle({ backgroundColor: '#004400' }));
+    // Layout:
+    // - Boss Test at the top
+    // - Challenges below
+    // - Endless (left) and Wave (right) in a row beneath
 
-    this.waveButton = this.add.text(centerX + 100, centerY - 20, 'WAVE', {
-      fontSize: '28px',
-      color: '#ff00ff',
-      backgroundColor: '#440044',
-      padding: { x: 20, y: 10 }
-    }).setOrigin(0.5)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', this.startWaveMode, this)
-      .on('pointerover', () => this.waveButton?.setStyle({ backgroundColor: '#660066' }))
-      .on('pointerout', () => this.waveButton?.setStyle({ backgroundColor: '#440044' }));
-
-    const challengeButton = this.add.text(centerX, centerY - 60, 'CHALLENGE', {
-      fontSize: '28px',
-      color: '#00ffff',
-      backgroundColor: '#003344',
-      padding: { x: 20, y: 10 }
-    }).setOrigin(0.5)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => { try { window.location.href = '/challenge'; } catch {} })
-      .on('pointerover', () => challengeButton.setStyle({ backgroundColor: '#004455' }))
-      .on('pointerout', () => challengeButton.setStyle({ backgroundColor: '#003344' }));
-
-    this.bossTestButton = this.add.text(centerX - 100, centerY + 20, 'BOSS TEST', {
+    // Boss Test (top)
+    this.bossTestButton = this.add.text(centerX, centerY - 120, 'BOSS TEST', {
       fontSize: '20px',
       color: '#ff6666',
       backgroundColor: '#331111',
@@ -772,8 +752,44 @@ export class StartMenuScene extends Phaser.Scene {
       .on('pointerover', () => this.bossTestButton?.setStyle({ backgroundColor: '#552222' }))
       .on('pointerout', () => this.bossTestButton?.setStyle({ backgroundColor: '#331111' }));
 
-    // Add wave progress button
-    this.waveProgressButton = this.add.text(centerX + 100, centerY + 20, 'PROGRESS', {
+    // Challenges (below Boss Test)
+    this.challengeButton = this.add.text(centerX, centerY - 60, 'CHALLENGE', {
+      fontSize: '28px',
+      color: '#00ffff',
+      backgroundColor: '#003344',
+      padding: { x: 20, y: 10 }
+    }).setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => { try { window.location.href = '/challenge'; } catch {} })
+      .on('pointerover', () => this.challengeButton?.setStyle({ backgroundColor: '#004455' }))
+      .on('pointerout', () => this.challengeButton?.setStyle({ backgroundColor: '#003344' }));
+
+    // Endless (left)
+    this.classicButton = this.add.text(centerX - 160, centerY + 10, 'ENDLESS', {
+      fontSize: '28px',
+      color: '#00ff00',
+      backgroundColor: '#004400',
+      padding: { x: 20, y: 10 }
+    }).setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', this.startGame, this)
+      .on('pointerover', () => this.classicButton?.setStyle({ backgroundColor: '#006600' }))
+      .on('pointerout', () => this.classicButton?.setStyle({ backgroundColor: '#004400' }));
+
+    // Wave (right)
+    this.waveButton = this.add.text(centerX + 160, centerY + 10, 'WAVE', {
+      fontSize: '28px',
+      color: '#ff00ff',
+      backgroundColor: '#440044',
+      padding: { x: 20, y: 10 }
+    }).setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', this.startWaveMode, this)
+      .on('pointerover', () => this.waveButton?.setStyle({ backgroundColor: '#660066' }))
+      .on('pointerout', () => this.waveButton?.setStyle({ backgroundColor: '#440044' }));
+
+    // Progress (below the row)
+    this.waveProgressButton = this.add.text(centerX, centerY + 80, 'PROGRESS', {
       fontSize: '16px',
       color: '#888888',
       backgroundColor: '#222222',
@@ -784,7 +800,7 @@ export class StartMenuScene extends Phaser.Scene {
       .on('pointerover', () => this.waveProgressButton?.setStyle({ backgroundColor: '#333333' }))
       .on('pointerout', () => this.waveProgressButton?.setStyle({ backgroundColor: '#222222' }));
 
-    this.modesBackButton = this.add.text(centerX, centerY + 120, 'BACK', {
+    this.modesBackButton = this.add.text(centerX, centerY + 140, 'BACK', {
       fontSize: '24px',
       color: '#ffffff',
       backgroundColor: '#660000',
@@ -811,6 +827,7 @@ export class StartMenuScene extends Phaser.Scene {
     if (this.classicButton) { this.classicButton.destroy(); this.classicButton = undefined; }
     if (this.waveButton) { this.waveButton.destroy(); this.waveButton = undefined; }
     if (this.bossTestButton) { this.bossTestButton.destroy(); this.bossTestButton = undefined; }
+    if (this.challengeButton) { this.challengeButton.destroy(); this.challengeButton = undefined; }
     if (this.modesBackButton) { this.modesBackButton.destroy(); this.modesBackButton = undefined; }
     if (this.waveProgressButton) { this.waveProgressButton.destroy(); this.waveProgressButton = undefined; }
     if (this.waveProgressDisplay) { this.waveProgressDisplay.destroy(); this.waveProgressDisplay = undefined; }

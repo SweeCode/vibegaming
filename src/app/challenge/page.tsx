@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { hasAchievement, listAchievements } from '@/game/systems/Achievements';
+import { listAchievements } from '@/game/systems/Achievements';
 
 type ChallengeNode = {
   id: number;
@@ -48,15 +48,16 @@ export default function Challenge() {
   }, []);
 
   const completedCount = useMemo(() => {
+    // Use client-loaded achievements state only to avoid SSR/CSR mismatch
     let count = 0;
     for (const c of CHALLENGES) {
-      if (c.achievementId && hasAchievement(c.achievementId)) count++;
+      if (c.achievementId && achievements[c.achievementId]) count++;
       else break;
     }
     return count;
   }, [achievements]);
 
-  const isCompleted = (c: ChallengeNode) => c.achievementId ? !!achievements[c.achievementId] || hasAchievement(c.achievementId) : false;
+  const isCompleted = (c: ChallengeNode) => (c.achievementId ? !!achievements[c.achievementId] : false);
   const isUnlocked = (c: ChallengeNode) => c.id <= completedCount + 1;
 
   const unseenIds = useMemo(() => {
@@ -85,15 +86,20 @@ export default function Challenge() {
   };
 
   return (
-    <main style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: 'radial-gradient(1200px 800px at 30% 20%, rgba(20,255,200,0.08), rgba(0,0,0,0)) , radial-gradient(900px 600px at 80% 60%, rgba(0,180,255,0.08), rgba(0,0,0,0)) , linear-gradient(180deg, #05070f 0%, #060913 100%)' }}>
-      <div style={{ position: 'absolute', bottom: 16, left: 16, display: 'flex', gap: 12 }}>
+    <main style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: 'radial-gradient(1200px 800px at 30% 20%, rgba(139,92,246,0.08), rgba(0,0,0,0)) , radial-gradient(900px 600px at 80% 60%, rgba(76,29,149,0.08), rgba(0,0,0,0)) , linear-gradient(180deg, #05070f 0%, #060913 100%)', fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial' }}>
+      {/* Back - top left */}
+      <div style={{ position: 'absolute', top: 16, left: 16 }}>
         <Link href="/" style={{ color: '#93c5fd', fontWeight: 600 }}>&larr; Back</Link>
+      </div>
+
+      {/* Achievements - bottom center */}
+      <div style={{ position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 1000 }}>
         <button
           onClick={() => {
             if (unseenIds.length > 0) setShowCongrats(true);
-            else router.push('/?show=achievements');
+            else router.push('/?show=achievements&from=challenge');
           }}
-          style={{ position: 'relative', color: '#111827', fontWeight: 800, background: '#22d3ee', padding: '6px 12px', borderRadius: 10, border: '1px solid #0891b2', cursor: 'pointer', boxShadow: unseenIds.length ? '0 0 16px rgba(34,211,238,0.9), 0 0 32px rgba(34,211,238,0.6)' : 'none', animation: unseenIds.length ? 'pulseShadow 1.2s ease-in-out infinite' : undefined }}
+          style={{ position: 'relative', color: '#111827', fontWeight: 800, background: '#22d3ee', padding: '8px 14px', borderRadius: 12, border: '1px solid #0891b2', cursor: 'pointer', boxShadow: unseenIds.length ? '0 0 16px rgba(34,211,238,0.9), 0 0 32px rgba(34,211,238,0.6)' : 'none', animation: unseenIds.length ? 'pulseShadow 1.2s ease-in-out infinite' : undefined }}
         >
           Achievements
           {unseenIds.length ? (
@@ -114,7 +120,7 @@ export default function Challenge() {
             const prev = nodes[i - 1];
             const unlocked = isUnlocked(n.c);
             const completed = isCompleted(n.c);
-            const color = completed ? '#22d3ee' : unlocked ? '#64748b' : '#334155';
+            const color = completed ? '#a78bfa' : unlocked ? '#7c3aed' : '#1f2937';
             return (
               <line key={`line-${i}`} x1={prev.x} y1={prev.y} x2={n.x} y2={n.y} stroke={color} strokeWidth={3} strokeLinecap="round" opacity={0.9} />
             );
@@ -126,30 +132,31 @@ export default function Challenge() {
           const unlocked = isUnlocked(c);
           const locked = !unlocked;
           const size = 72;
-          const glow = completed ? '0 0 22px rgba(34,211,238,0.95), 0 0 46px rgba(34,211,238,0.6)' : unlocked ? '0 0 14px rgba(148,163,184,0.5)' : 'none';
-          const bg = completed ? 'linear-gradient(180deg, #0b3b46, #051c22)' : unlocked ? 'linear-gradient(180deg, #0b1220, #08111c)' : 'linear-gradient(180deg, #0a0f1a, #070b12)';
-          const border = completed ? '#22d3ee' : unlocked ? '#93c5fd' : '#475569';
+          const glow = completed ? '0 0 22px rgba(167,139,250,0.95), 0 0 46px rgba(167,139,250,0.6)' : unlocked ? '0 0 14px rgba(124,58,237,0.5)' : 'none';
+          const bg = completed ? 'linear-gradient(180deg, #121026, #0a0718)' : unlocked ? 'linear-gradient(180deg, #0e091b, #0a0e18)' : 'linear-gradient(180deg, #0a0f1a, #070b12)';
+          const border = completed ? '#a78bfa' : unlocked ? '#7c3aed' : '#374151';
           const cursor = unlocked ? 'pointer' as const : 'default' as const;
           const animation = unlocked && !completed ? 'pulseShadow 1.6s ease-in-out infinite' : undefined;
-          const label = completed ? '✅' : locked ? '🔒' : '🔓';
-          const badge = completed && c.achievementId && achievements[c.achievementId]?.title ? achievements[c.achievementId]?.title : completed ? 'Completed' : '';
+          // simple status dot (no emoji or text)
+          const statusColor = completed ? '#a78bfa' : unlocked ? '#94a3b8' : '#475569';
 
           return (
-            <div key={c.id} onClick={() => onPlay(c.slug, unlocked)} title={c.title}
+            <div key={c.id} onClick={() => onPlay(c.slug, unlocked)} title={unlocked ? c.title : 'Locked'}
               style={{ position: 'absolute', left: x - size / 2, top: y - size / 2, width: size, height: size, borderRadius: '50%', border: `3px solid ${border}`, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#e2e8f0', boxShadow: glow, cursor, transition: 'transform 180ms ease', animation }}
               onMouseEnter={e => { if (unlocked) (e.currentTarget.style.transform = 'scale(1.06)'); }}
               onMouseLeave={e => { (e.currentTarget.style.transform = 'scale(1.0)'); }}
             >
               <div style={{ textAlign: 'center', lineHeight: 1 }}>
                 <div style={{ fontSize: 18, fontWeight: 800 }}>{c.id}</div>
-                <div style={{ fontSize: 14, opacity: 0.9 }}>{label}</div>
+                <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                  <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 999, background: statusColor, boxShadow: completed ? '0 0 10px rgba(167,139,250,0.9)' : unlocked ? '0 0 6px rgba(148,163,184,0.6)' : 'none' }} />
+                </div>
               </div>
-              {badge ? (
-                <div style={{ position: 'absolute', top: -26, left: '50%', transform: 'translateX(-50%)', background: '#0b3b46', color: '#22d3ee', padding: '2px 8px', borderRadius: 999, fontSize: 12, border: '1px solid #22d3ee' }}>{badge}</div>
+              {unlocked ? (
+                <div style={{ position: 'absolute', top: size + 12, left: '50%', transform: 'translateX(-50%)', width: 220, textAlign: 'center', color: '#94a3b8', fontSize: 12 }}>
+                  {c.title}: {c.desc}
+                </div>
               ) : null}
-              <div style={{ position: 'absolute', top: size + 12, left: '50%', transform: 'translateX(-50%)', width: 220, textAlign: 'center', color: '#94a3b8', fontSize: 12 }}>
-                {c.title}: {c.desc}
-              </div>
             </div>
           );
         })}
@@ -157,18 +164,18 @@ export default function Challenge() {
 
       <style jsx>{`
         @keyframes pulseShadow {
-          0%, 100% { box-shadow: 0 0 8px rgba(148,163,184,0.4); }
-          50% { box-shadow: 0 0 22px rgba(148,163,184,0.9); }
+          0%, 100% { box-shadow: 0 0 8px rgba(124,58,237,0.4); }
+          50% { box-shadow: 0 0 22px rgba(124,58,237,0.9); }
         }
       `}</style>
 
       {showCongrats ? (
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ width: 520, background: 'linear-gradient(180deg,#031b21,#051018)', border: '1px solid #22d3ee', borderRadius: 16, padding: 20, color: '#e2e8f0', textAlign: 'center', boxShadow: '0 0 24px rgba(34,211,238,0.5)' }}>
-            <div style={{ fontSize: 24, color: '#22d3ee', fontWeight: 800, marginBottom: 10 }}>New Achievement{unseenIds.length > 1 ? 's' : ''}!</div>
+          <div style={{ width: 520, background: 'linear-gradient(180deg,#0c0820,#0a0e18)', border: '1px solid #7c3aed', borderRadius: 16, padding: 20, color: '#e2e8f0', textAlign: 'center', boxShadow: '0 0 24px rgba(124,58,237,0.5)' }}>
+            <div style={{ fontSize: 24, color: '#a78bfa', fontWeight: 800, marginBottom: 10 }}>New Achievement{unseenIds.length > 1 ? 's' : ''}!</div>
             <div style={{ fontSize: 16, color: '#cbd5e1', marginBottom: 16 }}>
               {unseenIds.map((id) => (
-                <div key={id} style={{ padding: '6px 10px', margin: '6px 0', borderRadius: 10, background: '#07242b', border: '1px solid #0ea5b9' }}>{achievements[id]?.title || id}</div>
+                <div key={id} style={{ padding: '6px 10px', margin: '6px 0', borderRadius: 10, background: '#160f2f', border: '1px solid #7c3aed' }}>{achievements[id]?.title || id}</div>
               ))}
             </div>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
@@ -180,9 +187,9 @@ export default function Challenge() {
                   try { localStorage.setItem('achievements_seen', JSON.stringify(updated)); } catch {}
                   setShowCongrats(false);
                 }}
-                style={{ background: '#22d3ee', color: '#0b1220', fontWeight: 800, padding: '10px 16px', borderRadius: 10, border: '1px solid #0891b2', cursor: 'pointer' }}
+                style={{ background: '#a78bfa', color: '#0b1220', fontWeight: 800, padding: '10px 16px', borderRadius: 10, border: '1px solid #7c3aed', cursor: 'pointer' }}
               >Claim</button>
-              <button onClick={() => router.push('/achievements')} style={{ background: 'transparent', color: '#93c5fd', fontWeight: 700, padding: '10px 16px', borderRadius: 10, border: '1px solid #1e293b', cursor: 'pointer' }}>View All</button>
+              <button onClick={() => router.push('/?show=achievements&from=challenge')} style={{ background: 'transparent', color: '#c4b5fd', fontWeight: 700, padding: '10px 16px', borderRadius: 10, border: '1px solid #1e293b', cursor: 'pointer' }}>View All</button>
             </div>
           </div>
         </div>

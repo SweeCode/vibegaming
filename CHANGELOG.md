@@ -4,6 +4,46 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixes and updates
+- ChallengeScene: normalized bullet–pillar collider args and guarded Arcade Body before calling `setVelocity` to fix runtime TypeError.
+- Enemy bullets: added `collideWorldBounds` + `onWorldBounds` and a world-bounds handler to deactivate offscreen bullets; added enemy bullets ↔ pillars collider to deactivate on impact; increased enemy bullet pool to 400 to prevent bosses from “running out” of bullets and stopping fire.
+- Challenge page hydration: removed server-time access to `hasAchievement` during render; completion/unlock visuals now derive from client-loaded `achievements` state to avoid SSR/CSR mismatch.
+- Achievements navigation: challenge page buttons now route with `?show=achievements&from=challenge`; AchievementsScene Back first attempts `history.back()` then falls back to `/challenge`; raised Achievements button z-index on challenge page for clickability.
+- Start Menu Game Modes layout: rearranged buttons (Boss Test top, Challenges beneath, Endless left, Wave right) with clearer spacing; fixed persistence so the Challenges button is destroyed when leaving Game Modes.
+
+### Challenge Mode (Boss Rush) – fixes and improvements
+- Added dedicated `ChallengeScene` for challenge levels with Boss Rush restored:
+  - Green “hell” theme arena, two bosses at once (Sentinel + Artillery)
+  - Four random pillars with safe placement and static colliders
+  - Proper intro (silhouettes, title/subtitle, 2.4s hold, flash/shake)
+  - Two separate boss health bars (SENTINEL top, ARTILLERY bottom)
+  - ESC pause opens existing `PauseMenuScene`; Retry fully resets inputs/timers/physics
+  - On victory: congrats overlay with Continue button returning to Challenge selector
+- Bullet physics hardening to fix runtime errors:
+  - Use Arcade Body `setVelocity(...)` everywhere; guard bodies with safe casts
+  - Clean deactivation on pillar collision for both player and enemy bullets
+  - World-bounds cleanup for enemy bullets
+- Damage model aligned with Wave mode (no unexpected one‑shots):
+  - Boss Rush uses normal HP; only Glass Cannon sets HP=1
+  - Enemy collision and boss bullets use `GAME_SETTINGS` scaling
+  - Boss contact damage mirrors WaveScene logic
+- Start Menu integration:
+  - Auto-route `/challenge/play?level=...` into `ChallengeScene`
+  - CHALLENGE button added under Game Modes (routes to `/challenge` selector)
+- Challenge selector page:
+  - Vibrant node map with locked/unlocked/completed visuals and connections
+  - Back button top-left; Achievements button bottom-center (pulses on new)
+  - Achievements button routes to Start Menu with Achievements auto-opened
+- Achievements (per-player):
+  - Local achievements now hydrate from/sync to Convex (best-effort)
+  - New-achievement “claim” overlay on the challenge selector; badge pulses until seen
+
+### Technical
+- Restored `ChallengeScene` registration in `Game.tsx`
+- Added `/challenge` and `/challenge/play` routes back into App Router
+- Fixed physics callback typings; removed lingering `any` bodies and guarded casts
+- Minor lint fixes in challenge code paths
+
 ## [1.1.0] - 2025-09-22 — Arena UI & Background changes (branch: ARENA-UI-background-changes)
 
 ### Changed

@@ -108,7 +108,24 @@ export class AchievementsScene extends Phaser.Scene {
       padding: { x: 20, y: 10 }
     }).setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.scene.start('StartMenuScene'))
+      .on('pointerdown', () => {
+        try {
+          const url = new URL(window.location.href)
+          const from = url.searchParams.get('from')
+          if (from === 'challenge') {
+            // Go back to challenge page in Next app
+            try { (window as unknown as { history?: History }).history?.back(); } catch {}
+            // Fallback if history doesn't contain challenge
+            this.time.delayedCall(50, () => {
+              try { window.location.href = '/challenge'; } catch {}
+            })
+          } else {
+            this.scene.start('StartMenuScene')
+          }
+        } catch {
+          this.scene.start('StartMenuScene')
+        }
+      })
       .on('pointerover', () => this.backButton.setStyle({ backgroundColor: '#880000' }))
       .on('pointerout', () => this.backButton.setStyle({ backgroundColor: '#660000' }))
 

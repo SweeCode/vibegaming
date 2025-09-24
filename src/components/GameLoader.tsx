@@ -19,7 +19,7 @@ const GameLoader = () => {
         // StartMenuScene will read this from URL and open Achievements
       }
     } catch {}
-  }, []);
+  }, [params]);
   return <Game />;
 };
 
